@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import Actor, Group, MCError, Settings
+from .config import Actor, Group, MCError, Settings, group_ids
 
 
 def now() -> str:
@@ -18,13 +18,14 @@ class Store:
         self.path = directory / "mc.sqlite3"
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
+        self._savepoint = 0
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS scopes(id TEXT PRIMARY KEY, platform TEXT, group_id TEXT,
             next_id INTEGER NOT NULL DEFAULT 1, initialized INTEGER NOT NULL DEFAULT 0,
             active INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE IF NOT EXISTS bindings(server TEXT PRIMARY KEY, scope TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS bindings(server TEXT, scope TEXT NOT NULL, PRIMARY KEY(server,scope));
         CREATE TABLE IF NOT EXISTS server_history(server TEXT PRIMARY KEY, scope TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS entries(scope TEXT, id INTEGER, name TEXT COLLATE NOCASE,
             uuid TEXT, owner TEXT, created TEXT, PRIMARY KEY(scope,id),
@@ -33,6 +34,8 @@ class Store:
             time TEXT, platform TEXT, group_id TEXT, user TEXT, user_name TEXT,
             action TEXT, player TEXT, detail TEXT);
         CREATE TABLE IF NOT EXISTS sessions(scope TEXT PRIMARY KEY, origin TEXT);
+        CREATE TABLE IF NOT EXISTS group_sessions(scope TEXT, group_id TEXT, origin TEXT, PRIMARY KEY(scope,group_id));
+        CREATE TABLE IF NOT EXISTS sync_versions(server TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS dirty(server TEXT PRIMARY KEY, error TEXT DEFAULT '待同步');
         CREATE TABLE IF NOT EXISTS jobs(server TEXT PRIMARY KEY, scope TEXT, origin TEXT,
             started TEXT, status TEXT, detail TEXT DEFAULT '');
@@ -41,6 +44,13 @@ class Store:
         """)
 
         with self.db:
+            self.db.execute("BEGIN")
+            binding_columns = {row[1]: row[5] for row in self.db.execute("PRAGMA table_info(bindings)")}
+            if not binding_columns.get("scope"):
+                self.db.execute("ALTER TABLE bindings RENAME TO bindings_single_scope")
+                self.db.execute("CREATE TABLE bindings(server TEXT, scope TEXT NOT NULL, PRIMARY KEY(server,scope))")
+                self.db.execute("INSERT INTO bindings SELECT server,scope FROM bindings_single_scope")
+                self.db.execute("DROP TABLE bindings_single_scope")
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(scopes)")}
             if "active" not in columns:
                 self.db.execute("ALTER TABLE scopes ADD COLUMN active INTEGER NOT NULL DEFAULT 0")
@@ -58,16 +68,38 @@ class Store:
                         (row["scope"], row["origin"]),
                     )
 
+            for row in self.db.execute(
+                "SELECT sessions.scope,scopes.group_id,sessions.origin FROM sessions JOIN scopes ON scopes.id=sessions.scope"
+            ).fetchall():
+                identities = group_ids(row["group_id"])
+                if len(identities) == 1:
+                    self.db.execute("INSERT OR IGNORE INTO group_sessions VALUES(?,?,?)", tuple(row))
+
     @contextmanager
     def transaction(self):
-        with self.db:
-            yield
+        if self.db.in_transaction:
+            self._savepoint += 1
+            name = f"mc_nested_{self._savepoint}"
+            self.db.execute(f"SAVEPOINT {name}")
+            try:
+                yield
+            except BaseException:
+                self.db.execute(f"ROLLBACK TO {name}")
+                self.db.execute(f"RELEASE {name}")
+                raise
+            else:
+                self.db.execute(f"RELEASE {name}")
+        else:
+            with self.db:
+                self.db.execute("BEGIN")
+                yield
 
     def _reset_scope_delivery(self, scope: str):
         origins = [
             row[0]
             for row in self.db.execute(
-                "SELECT origin FROM sessions WHERE scope=? UNION SELECT origin FROM jobs WHERE scope=?", (scope, scope)
+                "SELECT origin FROM sessions WHERE scope=? UNION SELECT origin FROM jobs WHERE scope=? UNION SELECT origin FROM group_sessions WHERE scope=?",
+                (scope, scope, scope),
             )
             if row[0]
         ]
@@ -75,25 +107,25 @@ class Store:
         for origin in origins:
             self.db.execute("DELETE FROM outbox WHERE origin=? AND (scope='' OR scope IS NULL)", (origin,))
         self.db.execute("DELETE FROM sessions WHERE scope=?", (scope,))
+        self.db.execute("DELETE FROM group_sessions WHERE scope=?", (scope,))
         self.db.execute(
             "UPDATE jobs SET status='configuration_changed',detail='群或服务器绑定已更改，旧广播已取消' WHERE scope=? AND status='running'",
             (scope,),
         )
 
     def validate_scopes(self, settings: Settings, reserve: bool = True, actor: Actor | None = None):
-        # Settings validates duplicate identities and server membership. Historical
-        # rows are archives; only the bindings table represents current ownership.
         if not reserve:
             return
         with self.transaction():
             previous = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM scopes")}
-            old_bindings = {row["server"]: row["scope"] for row in self.db.execute("SELECT * FROM bindings")}
+            old_bindings = {(row["server"], row["scope"]) for row in self.db.execute("SELECT * FROM bindings")}
             history = {row["server"]: row["scope"] for row in self.db.execute("SELECT * FROM server_history")}
+            known_servers = set(history)
             for scope, row in previous.items():
                 if scope not in settings.groups:
                     self._reset_scope_delivery(scope)
                     self.db.execute("UPDATE scopes SET active=0 WHERE id=?", (scope,))
-                    if row["active"] or scope in old_bindings.values():
+                    if row["active"] or any(bound_scope == scope for _, bound_scope in old_bindings):
                         group = Group(scope, row["platform"], row["group_id"], ())
                         who = Actor(
                             group.platform,
@@ -102,7 +134,13 @@ class Store:
                             actor.name if actor else "配置同步",
                             True,
                         )
-                        self.audit(group, who, "unbind_group", "", "移除群绑定；服务器已释放，历史白名单和日志保留")
+                        self.audit(
+                            group,
+                            who,
+                            "unbind_group",
+                            "",
+                            "移除群绑定；共享服务器保留其他群的绑定，历史白名单和日志保留",
+                        )
             self.db.execute("DELETE FROM bindings")
             for group in settings.groups.values():
                 old = previous.get(group.id)
@@ -127,40 +165,83 @@ class Store:
                         (group.platform, group.group_id, group.id),
                     )
                     if changed:
+                        retained = self.origins(group.id) if old["platform"] == group.platform else {}
                         self._reset_scope_delivery(group.id)
-                        detail = f"群号/平台 {old['platform']}:{old['group_id']} → {group.platform}:{group.group_id}；白名单和编号保留，广播会话重置"
+                        for identity, origin in retained.items():
+                            if identity in group.group_ids:
+                                self.remember(group.id, origin, identity)
+                        detail = f"群号/平台 {old['platform']}:{old['group_id']} → {group.platform}:{group.group_id}；白名单和编号保留，失效广播会话重置"
                         if old["platform"] != group.platform:
                             self.db.execute("UPDATE entries SET owner='' WHERE scope=?", (group.id,))
                             detail += "；跨平台条目归属清空，由管理员管理"
                         self.audit(group, who, "change_group", "", detail)
                     elif not old["active"] and actor:
                         self.audit(group, who, "bind_group", "", "恢复已归档配置组，保留该组原有白名单")
-                transferred = [sid for sid in group.servers if sid in history and history[sid] != group.id]
-                if transferred:
-                    # Never seed a new scope from files containing the former
-                    # group's members. Its own DB entries are authoritative.
-                    self.db.execute("UPDATE scopes SET initialized=1 WHERE id=?", (group.id,))
+                eligible = []
                 for sid in group.servers:
-                    prior = history.get(sid)
+                    prior = history.setdefault(sid, group.id)
+                    if prior == group.id:
+                        eligible.append(sid)
                     self.db.execute("INSERT INTO bindings VALUES(?,?)", (sid, group.id))
-                    self.db.execute(
-                        "INSERT INTO server_history VALUES(?,?) ON CONFLICT(server) DO UPDATE SET scope=excluded.scope",
-                        (sid, group.id),
-                    )
-                    if changed or (
-                        old_bindings.get(sid) != group.id
-                        and (old is not None or actor is not None or prior is not None)
-                    ):
+                    self.db.execute("INSERT OR IGNORE INTO server_history VALUES(?,?)", (sid, group.id))
+                    if changed:
                         self.mark_dirty([sid])
-                    if prior is not None and prior != group.id:
+                    if (sid, group.id) not in old_bindings and prior != group.id:
                         self.audit(
                             group,
                             who,
                             "move_server",
                             sid,
-                            f"服务器从配置组 {prior} 转给 {group.id}，使用新组白名单，不自动导入旧组成员",
+                            f"配置组 {group.id} 接入共享/曾托管服务器 {sid}，使用本组数据库条目，不自动导入其他组成员",
                         )
+                if not eligible:
+                    self.db.execute("UPDATE scopes SET initialized=1 WHERE id=?", (group.id,))
+            current_bindings = {(row["server"], row["scope"]) for row in self.db.execute("SELECT * FROM bindings")}
+            for sid, scope in old_bindings ^ current_bindings:
+                if sid in settings.servers and (scope in previous or actor is not None or sid in known_servers):
+                    self.mark_dirty([sid])
+            for sid, groups in settings.server_groups.items():
+                if len(groups) > 1:
+                    self.server_entries(sid)
             self.db.execute("DELETE FROM dirty WHERE server NOT IN (SELECT server FROM bindings)")
+
+    def initial_servers(self, group: Group) -> list[str]:
+        return [
+            sid
+            for sid in group.servers
+            if self.db.execute("SELECT scope FROM server_history WHERE server=?", (sid,)).fetchone()[0] == group.id
+        ]
+
+    def server_entries(self, sid: str) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT e.* FROM entries e JOIN bindings b ON b.scope=e.scope WHERE b.server=? ORDER BY e.scope,e.id",
+            (sid,),
+        )
+        by_name, by_uuid = {}, {}
+        for row in rows:
+            entry = dict(row)
+            named, identified = by_name.get(entry["name"].casefold()), by_uuid.get(entry["uuid"])
+            if (named and named["uuid"] != entry["uuid"]) or (
+                identified and identified["name"].casefold() != entry["name"].casefold()
+            ):
+                raise MCError(f"共享服务器 {sid} 的玩家名与 UUID 冲突，请管理员核对各组条目。")
+            if not named:
+                by_name[entry["name"].casefold()] = entry
+                by_uuid[entry["uuid"]] = entry
+        return list(by_name.values())
+
+    def validate_player(self, group: Group, name: str, identifier: str, exclude_id: int | None = None):
+        for sid in group.servers:
+            rows = self.db.execute(
+                "SELECT e.* FROM entries e JOIN bindings b ON b.scope=e.scope WHERE b.server=?", (sid,)
+            )
+            for row in rows:
+                if row["scope"] == group.id and row["id"] == exclude_id:
+                    continue
+                if (row["name"].casefold() == name.casefold() and row["uuid"] != identifier) or (
+                    row["uuid"] == identifier and row["name"].casefold() != name.casefold()
+                ):
+                    raise MCError("该玩家名或 UUID 已在本群或共享服务器中存在冲突，请管理员核对。")
 
     def initialized(self, scope: str) -> bool:
         return bool(self.db.execute("SELECT initialized FROM scopes WHERE id=?", (scope,)).fetchone()[0])
@@ -192,29 +273,59 @@ class Store:
     def mark_dirty(self, servers):
         for sid in servers:
             self.db.execute(
+                "INSERT INTO sync_versions(server,revision) VALUES(?,1) ON CONFLICT(server) DO UPDATE SET revision=revision+1",
+                (sid,),
+            )
+            self.db.execute(
                 "INSERT INTO dirty(server,error) VALUES(?,?) ON CONFLICT(server) DO UPDATE SET error=excluded.error",
                 (sid, "待同步"),
             )
 
-    def sync_result(self, sid: str, error: str):
+    def revision(self, sid: str) -> int:
+        row = self.db.execute("SELECT revision FROM sync_versions WHERE server=?", (sid,)).fetchone()
+        return row[0] if row else 0
+
+    def sync_result(self, sid: str, error: str, revision: int | None = None):
         with self.transaction():
             if error:
                 self.db.execute(
                     "INSERT INTO dirty VALUES(?,?) ON CONFLICT(server) DO UPDATE SET error=excluded.error", (sid, error)
                 )
-            else:
+            elif revision is None or self.revision(sid) == revision:
                 self.db.execute("DELETE FROM dirty WHERE server=?", (sid,))
 
     def dirty(self) -> dict[str, str]:
         return {r[0]: r[1] for r in self.db.execute("SELECT * FROM dirty")}
 
-    def remember(self, scope: str, origin: str):
+    def remember(self, scope: str, origin: str, group_id: str = ""):
         if origin:
+            if not group_id:
+                row = self.db.execute("SELECT group_id FROM scopes WHERE id=?", (scope,)).fetchone()
+                identities = group_ids(row[0]) if row else ()
+                group_id = next(
+                    (
+                        identity
+                        for identity in identities
+                        if origin.endswith(":" + identity) or origin.endswith("_" + identity)
+                    ),
+                    identities[0] if len(identities) == 1 else "",
+                )
             with self.transaction():
                 self.db.execute(
                     "INSERT INTO sessions VALUES(?,?) ON CONFLICT(scope) DO UPDATE SET origin=excluded.origin",
                     (scope, origin),
                 )
+                if group_id:
+                    self.db.execute(
+                        "INSERT INTO group_sessions VALUES(?,?,?) ON CONFLICT(scope,group_id) DO UPDATE SET origin=excluded.origin",
+                        (scope, group_id, origin),
+                    )
+
+    def origins(self, scope: str) -> dict[str, str]:
+        return {
+            row["group_id"]: row["origin"]
+            for row in self.db.execute("SELECT group_id,origin FROM group_sessions WHERE scope=?", (scope,))
+        }
 
     def origin(self, scope: str) -> str:
         row = self.db.execute("SELECT origin FROM sessions WHERE scope=?", (scope,)).fetchone()
@@ -237,14 +348,23 @@ class Store:
                 (sid, scope, origin, now(), "running", ""),
             )
 
-    def finish_job(self, sid: str, status: str, detail: str, origin: str, text: str):
+    def finish_job(
+        self,
+        sid: str,
+        status: str,
+        detail: str,
+        origin: str,
+        text: str,
+        recipients: list[tuple[str, str]] | None = None,
+    ):
         with self.transaction():
             self.db.execute("UPDATE jobs SET status=?,detail=? WHERE server=?", (status, detail, sid))
-            if origin:
+            if recipients is None:
                 row = self.db.execute("SELECT scope FROM jobs WHERE server=?", (sid,)).fetchone()
-                scope = row[0] if row else ""
+                recipients = [(row[0] if row else "", origin)] if origin else []
+            for scope, target in recipients:
                 self.db.execute(
-                    "INSERT INTO outbox(origin,text,created,scope) VALUES(?,?,?,?)", (origin, text, now(), scope)
+                    "INSERT INTO outbox(origin,text,created,scope) VALUES(?,?,?,?)", (target, text, now(), scope)
                 )
 
     def jobs(self) -> list[dict]:

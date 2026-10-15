@@ -40,6 +40,7 @@ class Service:
         self.restart_tasks: dict[str, asyncio.Task] = {}
         self.background = None
         self.delivery_lock = asyncio.Lock()
+        self.initialization_lock = asyncio.Lock()
         self.last_status: dict[str, str] = {}
         self.closed = False
 
@@ -52,7 +53,14 @@ class Service:
                 name = server.name if server else job["server"]
                 error = "插件监控曾中断，无法确认重启结果；请查询服务器状态。"
                 text = self.settings.render("restart_failed", server=name, error=error)
-                self.store.finish_job(job["server"], "interrupted", error, job["origin"], text)
+                self.store.finish_job(
+                    job["server"],
+                    "interrupted",
+                    error,
+                    job["origin"],
+                    text,
+                    recipients=self.server_recipients(job["server"], job["scope"], job["origin"]),
+                )
         self.resume()
 
     def resume(self):
@@ -77,21 +85,33 @@ class Service:
             async with lock:
                 pass
 
+    def broadcast_origins(self, group: Group) -> dict[str, str]:
+        recorded = self.store.origins(group.id)
+        result = {identity: recorded[identity] for identity in group.group_ids if recorded.get(identity)}
+        parts = group.origin.split(":", 2)
+        if len(parts) == 3 and parts[0] == group.platform and parts[1] == "GroupMessage":
+            for identity in group.group_ids:
+                if parts[2] == identity or parts[2].endswith("_" + identity):
+                    result.setdefault(identity, group.origin)
+        return result
+
     def broadcast_origin(self, group: Group, actor: Actor) -> str:
         if actor.origin:
             return actor.origin
-        recorded = self.store.origin(group.id)
-        if recorded:
-            return recorded
-        parts = group.origin.split(":", 2)
-        if (
-            len(parts) == 3
-            and parts[0] == group.platform
-            and parts[1] == "GroupMessage"
-            and (parts[2] == group.group_id or parts[2].endswith("_" + group.group_id))
-        ):
-            return group.origin
-        return ""
+        origins = self.broadcast_origins(group)
+        return origins.get(actor.group) or next(iter(origins.values()), "")
+
+    def server_recipients(self, sid: str, scope: str = "", origin: str = "") -> list[tuple[str, str]]:
+        result, sent = [], set()
+        for group in self.settings.server_groups.get(sid, ()):
+            targets = list(self.broadcast_origins(group).values())
+            if group.id == scope and origin:
+                targets.append(origin)
+            for target in targets:
+                if target not in sent:
+                    result.append((group.id, target))
+                    sent.add(target)
+        return result
 
     async def probe_servers(self):
         # Probe every configured endpoint before whitelist work. A broken file
@@ -115,21 +135,33 @@ class Service:
             await asyncio.sleep(self.settings.sync_interval)
 
     async def ensure_group(self, group: Group):
-        if not self.store.initialized(group.id):
-            await self.import_group(group, initial=True)
+        # No group/server locks are acquired here. Every related initial import
+        # completes before any shared server is overwritten by a partial union.
+        async with self.initialization_lock:
+            for related in self.settings.related_groups(group):
+                if not self.store.initialized(related.id):
+                    await self.import_group(related, initial=True)
 
     async def import_group(self, group: Group, initial: bool = False) -> int:
         # Read all files first. One corrupt/missing directory prevents a partial
         # first import from becoming an authoritative whitelist.
+        servers = self.store.initial_servers(group) if initial else list(group.servers)
         snapshots = await asyncio.gather(
-            *(asyncio.to_thread(read_whitelist, self.settings.servers[s]) for s in group.servers)
+            *(asyncio.to_thread(read_whitelist, self.settings.servers[s]) for s in servers)
         )
         existing = self.store.entries(group.id)
         by_name = {r["name"].casefold(): r for r in existing}
         by_uuid = {r["uuid"]: r for r in existing}
         additions = []
-        for rows in snapshots:
+        for sid, rows in zip(servers, snapshots):
+            foreign = {
+                (entry["name"].casefold(), entry["uuid"])
+                for entry in self.store.server_entries(sid)
+                if entry["scope"] != group.id
+            }
             for row in rows:
+                if (row["name"].casefold(), row["uuid"]) in foreign:
+                    continue
                 named = by_name.get(row["name"].casefold())
                 identified = by_uuid.get(row["uuid"])
                 if named and named["uuid"] != row["uuid"]:
@@ -142,6 +174,7 @@ class Service:
                     by_uuid[row["uuid"]] = row
         with self.store.transaction():
             for row in additions:
+                self.store.validate_player(group, row["name"], row["uuid"])
                 self.store.insert(group.id, row["name"], row["uuid"], "")
             self.store.db.execute("UPDATE scopes SET initialized=1 WHERE id=?", (group.id,))
             self.store.mark_dirty(group.servers)
@@ -218,7 +251,7 @@ class Service:
             raise
 
     async def sync_group(self, group: Group, force: bool = False, allow_restart: str = "") -> str:
-        entries = self.store.entries(group.id)
+        await self.ensure_group(group)
         messages = []
         for sid in group.servers:
             server = self.settings.servers[sid]
@@ -227,7 +260,11 @@ class Service:
                 messages.append(f"{server.name}：重启中，待同步")
                 continue
             try:
+                # Hold only one server lock, then release it before moving to
+                # another server. Never acquire another group's lock while here.
                 async with self.server_locks[sid]:
+                    entries = self.store.server_entries(sid)
+                    revision = self.store.revision(sid)
                     changed = await self.disk_write(server, entries)
                     needs_reload = changed or sid in self.store.dirty() or force
                     if needs_reload:
@@ -238,7 +275,7 @@ class Service:
                                 for x in ("unknown", "incorrect", "未知", "failed", "exception")
                             ):
                                 raise MCError("白名单重载失败：" + response)
-                self.store.sync_result(sid, "")
+                    self.store.sync_result(sid, "", revision=revision)
                 messages.append(f"{server.name}：已同步")
             except Exception as exc:
                 reason = safe_text(str(exc) or type(exc).__name__, 300)
@@ -282,7 +319,7 @@ class Service:
         group = self.settings.group_for(actor)
         if not isinstance(actor.user, str) or not actor.user.strip():
             raise MCError("无法确认发送者身份，请使用可识别账号的群聊消息重试。")
-        self.store.remember(group.id, actor.origin)
+        self.store.remember(group.id, actor.origin, actor.group)
         admin_actions = {"logs", "restart", "sync", "import"}
         if action in admin_actions:
             self.require_admin(actor, group)
@@ -401,6 +438,7 @@ class Service:
                 name, identifier = await self.resolve_player(group, args[0])
                 try:
                     with self.store.transaction():
+                        self.store.validate_player(group, name, identifier)
                         index = self.store.insert(group.id, name, identifier, actor.user)
                         self.store.audit(
                             group, actor, "add", name, f"#{index}; UUID={identifier}; 同步到 {','.join(group.servers)}"
@@ -428,9 +466,17 @@ class Service:
                     name, identifier = await self.resolve_player(group, args[1])
                     try:
                         with self.store.transaction():
+                            self.store.validate_player(group, name, identifier, exclude_id=row["id"])
                             updated = self.store.db.execute(
                                 "UPDATE entries SET name=?,uuid=? WHERE scope=? AND id=? AND (owner=? OR ?=1)",
-                                (name, identifier, group.id, row["id"], actor.user, int(self.settings.is_admin(actor, group))),
+                                (
+                                    name,
+                                    identifier,
+                                    group.id,
+                                    row["id"],
+                                    actor.user,
+                                    int(self.settings.is_admin(actor, group)),
+                                ),
                             )
                             if updated.rowcount != 1:
                                 raise MCError("条目归属已变化或权限不足，请重新查看白名单。")
@@ -520,7 +566,9 @@ class Service:
             current = self.restart_tasks.get(sid)
             if current is asyncio.current_task():
                 self.restart_tasks.pop(sid, None)
-        self.store.finish_job(sid, status, detail, origin, text)
+        self.store.finish_job(
+            sid, status, detail, origin, text, recipients=self.server_recipients(sid, group.id, origin)
+        )
         with self.store.transaction():
             self.store.audit(group, system, "restart_" + status, sid, detail or "新 RCON 连续两次可执行查询")
         await self.deliver()
@@ -548,6 +596,8 @@ class Service:
                     "id": g.id,
                     "platform_id": g.platform,
                     "group_id": g.group_id,
+                    "group_ids": list(g.group_ids),
+                    "broadcast_group_ids": list(self.broadcast_origins(g)),
                     "server_ids": list(g.servers),
                     "entries": len(self.store.entries(g.id)),
                     "broadcast_ready": bool(self.broadcast_origin(g, Actor("", "", ""))),

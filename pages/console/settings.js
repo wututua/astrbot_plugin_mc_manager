@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const list = value => Array.isArray(value) ? value.map(String) : String(value || '').split(/[,，\n]+/).map(v => v.trim()).filter(Boolean);
+const list = value => Array.isArray(value) ? value.map(String) : String(value || '').split(/[,，\r\n]+/).map(v => v.trim()).filter(Boolean);
 const ranges = { page_size: [1, 100], sync_interval: [5, 3600], rcon_timeout: [1, 30], restart_timeout: [5, 3600], poll_interval: [1, 30], spark_file_max_age: [3, 300], rcon_port: [1, 65535], max_entries_per_user: [1, 100] };
 const entityRequired = new Set(['id', 'name', 'directory', 'rcon_host', 'rcon_port', 'platform_id', 'group_id', 'max_entries_per_user', 'tps_command', 'players_command', 'spark_file']);
 const sourceLabels = { auto: '自动：优先本地采样，再尝试 RCON', rcon: 'RCON 命令回复', file: '本地 spark 采集文件' };
@@ -45,6 +45,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     }
     for (const key of ['commands', 'messages']) if (value[key] !== undefined && !isObject(value[key])) throw new Error(`${key} 必须是 JSON 对象。`);
     for (const group of value.groups || []) {
+      if (group.group_id != null && !Array.isArray(group.group_id) && !['string', 'number'].includes(typeof group.group_id)) throw new Error('群号必须是文本、数字或群号列表。');
       for (const key of ['server_ids', 'admin_ids']) if (group[key] !== undefined && !Array.isArray(group[key]) && typeof group[key] !== 'string') throw new Error(`${key} 必须是账号/ID 列表。`);
     }
   }
@@ -54,6 +55,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     result.servers = (result.servers || []).map(row => defaults(serverItems(), row));
     result.groups = (result.groups || []).map(row => {
       const group = defaults(groupItems(), row);
+      group.group_id = [...new Set(list(group.group_id))].join(",");
       group.server_ids = list(group.server_ids);
       group.admin_ids = list(group.admin_ids);
       return group;
@@ -192,8 +194,8 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     draft.servers.forEach((server, index) => {
       const row = el('article', undefined, 'configured-row'); row.dataset.id = server.id;
       const info = el('div'); info.append(el('h4', server.name || server.id), el('p', `${server.id} · ${server.directory} · RCON ${server.rcon_host}:${server.rcon_port}`, 'subtle'));
-      const group = draft.groups.find(g => g.server_ids.includes(server.id));
-      info.append(el('p', group ? `绑定群：${group.group_id}（${group.id}）` : '尚未绑定群', 'subtle'));
+      const groups = draft.groups.filter(g => g.server_ids.includes(server.id));
+      info.append(el('p', groups.length ? `绑定群：${groups.map(group => `${group.group_id}（${group.id}）`).join('；')}` : '尚未绑定群', 'subtle'));
       const controls = el('div', undefined, 'buttons');
       controls.append(button('编辑服务器', () => openEntity('server', index)), button('移除服务器', () => removeEntity('server', index), 'danger'));
       row.append(info, controls); servers.append(row);
@@ -217,20 +219,19 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
   }
   function serverChoices(group) {
     const wrapper = el('fieldset', undefined, 'server-choices full-width');
-    wrapper.append(el('legend', '本群服务器（可多选）'));
+    wrapper.append(el('legend', '本配置服务器（可多选、可共享）'));
     const choices = [];
     for (const server of draft.servers) {
-      const selectedGroup = draft.groups.find((g, index) => index !== (entity?.kind === 'group' ? entity.index : -1) && g.server_ids.includes(server.id));
-      const locked = selectedGroup;
+      const sharedGroups = draft.groups.filter((g, index) => index !== (entity?.kind === 'group' ? entity.index : -1) && g.server_ids.includes(server.id));
       const label = el('label', undefined, 'server-choice');
       const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.value = server.id;
       checkbox.checked = group.server_ids.includes(server.id);
-      checkbox.disabled = Boolean(locked);
+      checkbox.disabled = false;
       const name = el('span', `${server.name}（${server.id}）`);
-      if (locked) name.append(el('small', `归属 ${selectedGroup.id || "未命名群"}`, 'field-hint'));
+      if (sharedGroups.length) name.append(el('small', `同时供 ${sharedGroups.map(g => g.group_id || g.id).join('、')} 使用`, 'field-hint'));
       label.append(checkbox, name); wrapper.append(label); choices.push(checkbox);
     }
-    wrapper.append(el('p', '服务器转给其他配置组后会同步新组白名单，旧组成员不会自动导入。每台服务器只归属一个群；同一群下的 UUID 模式必须一致。删除群绑定后，这些服务器可在草稿中重新选择；保存后生效。', 'field-hint'));
+    wrapper.append(el('p', '服务器可以被多个配置组同时选择，共享服同步各组白名单并集；各组只管理自己的条目。同一配置的多个群号共享条目；同组各服 UUID 模式必须一致。保存后生效。', 'field-hint'));
     return { wrapper, read: () => choices.filter(c => c.checked && !c.disabled).map(c => c.value) };
   }
   function openEntity(kind, index = -1) {
@@ -309,7 +310,11 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       const previous = bindings.groups.find(g => g.id === candidate.id);
       if (previous && (previous.platform !== candidate.platform_id || previous.group_id !== candidate.group_id)) candidate.broadcast_origin = '';
       if (!candidate.server_ids.length) throw new Error('至少勾选一台属于本群的服务器。');
-      if (rows.some((row, i) => i !== index && row.platform_id === candidate.platform_id && row.group_id === candidate.group_id)) throw new Error('该平台中的群号已经绑定。');
+      candidate.group_id = [...new Set(list(candidate.group_id))].join(',');
+      const identities = list(candidate.group_id);
+      if (!identities.length) throw new Error('至少填写一个群号，多个群号用逗号或换行分隔。');
+      if (identities.some(id => /\s/.test(id))) throw new Error('单个群号不能包含空白。');
+      if (rows.some((row, i) => i !== index && row.platform_id === candidate.platform_id && list(row.group_id).some(id => identities.includes(id)))) throw new Error('该平台中的群号已经绑定到其他配置。');
       const servers = draft.servers.filter(server => candidate.server_ids.includes(server.id));
       if (new Set(servers.map(s => s.online_mode)).size > 1) throw new Error('本群的服务器需要使用相同 UUID 模式。');
     }
@@ -337,7 +342,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
         const group = draft.groups.find(g => g.server_ids.includes(row.id));
         if (group) throw new Error(`服务器仍绑定群 ${group.group_id}，请先编辑或移除该群绑定。`);
       }
-      const prompt = kind === 'server' ? `从配置中移除 ${row.name}（${row.id}）？服务端文件和历史数据会保留。` : `移除群 ${row.group_id} 的绑定？服务器会释放，可重新绑定；历史白名单、归属和日志会保留。保存后此群将停止使用 MC 功能。`;
+      const prompt = kind === 'server' ? `从配置中移除 ${row.name}（${row.id}）？服务端文件和历史数据会保留。` : `移除群 ${row.group_id} 的绑定？其他配置组仍可继续使用共享服务器；历史白名单、归属和日志会保留。保存后这些群停止使用此配置的 MC 功能。`;
       if (!await confirmAction(prompt)) return;
       rows.splice(index, 1); touch(); renderEntities();
       notice('已修改配置草稿，点击“保存并生效”应用。');

@@ -82,7 +82,7 @@
       "__template_key": "group",
       "id": "group1",
       "platform_id": "YOUR_PLATFORM_INSTANCE_ID",
-      "group_id": "111111111",
+      "group_id": "111111111,111111112",
       "server_ids": [
         "server1",
         "server2",
@@ -100,6 +100,7 @@
       "platform_id": "YOUR_PLATFORM_INSTANCE_ID",
       "group_id": "222222222",
       "server_ids": [
+        "server3",
         "server4",
         "server5"
       ],

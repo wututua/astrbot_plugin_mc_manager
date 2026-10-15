@@ -103,6 +103,7 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         async def wait():
             while self.service.last_status.get(sid) != status:
                 await asyncio.sleep(0.001)
+
         await asyncio.wait_for(wait(), 2)
 
     async def test_start_probes_all_servers_even_if_unbound_offline_or_whitelist_invalid(self):
@@ -608,11 +609,11 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(MCError, "RCON"):
             Settings(raw)
 
-    def test_duplicate_server_in_groups_rejected(self):
+    def test_server_can_be_shared_between_groups(self):
         raw = self.base()
         raw["groups"].append({"id": "g2", "platform_id": "bot", "group_id": "2", "server_ids": ["s1"]})
-        with self.assertRaisesRegex(MCError, "归属"):
-            Settings(raw)
+        settings = Settings(raw)
+        self.assertEqual([group.id for group in settings.server_groups["s1"]], ["g1", "g2"])
 
     def test_mixed_uuid_modes_rejected(self):
         raw = self.base()

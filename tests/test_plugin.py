@@ -188,13 +188,16 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         async def wait():
             while self.plugin.service.last_status.get("server1") != "在线":
                 await asyncio.sleep(0.001)
+
         await asyncio.wait_for(wait(), 2)
 
     async def test_initialize_probes_without_dashboard_refresh_or_chat_command(self):
         await self.plugin.terminate()
         self.FakeRcon.commands.clear()
         with patch.object(
-            self.main, "Service", lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs)
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
         ):
             await self.plugin.initialize()
         await self.wait_for_automatic_probe()
@@ -213,6 +216,46 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         with self.bound_request():
             response = await self.plugin.page_snapshot()
         self.assertEqual(json.loads(response.body)["servers"][0]["status"], "在线")
+
+    async def test_web_config_accepts_multiple_chats_sharing_one_server(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "100,101"
+        raw["groups"].append({"id": "g2", "platform_id": "bot", "group_id": ["200", "201"], "server_ids": ["server1"]})
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200, response.body)
+        await self.plugin.service.pause()
+        await self.dispatch_command("/mc 添加 Steve", group="101", user="owner1")
+        await self.dispatch_command("/mc 添加 Alex", group="201", user="owner2")
+        names = {row["name"] for row in json.loads((self.root / "server1/whitelist.json").read_text(encoding="utf-8"))}
+        self.assertEqual(names, {"Steve", "Alex"})
+        with self.bound_request():
+            response = await self.plugin.page_snapshot()
+        groups = json.loads(response.body)["groups"]
+        self.assertEqual(groups[0]["group_ids"], ["100", "101"])
+        self.assertEqual(groups[1]["group_ids"], ["200", "201"])
+        self.assertEqual(len(self.plugin._config_bindings()["servers"]), 2)
+
+    async def test_dashboard_can_manage_a_multi_chat_configuration(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "100,101"
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.plugin.service.pause()
+        with self.bound_request({"group": "g1", "action": "add", "args": ["Steve"]}):
+            response = await self.plugin.page_action()
+        self.assertEqual(response.status_code, 200, response.body)
+        with self.bound_request({"group": "g1", "action": "remove", "args": ["1"]}):
+            response = await self.plugin.page_action()
+        self.assertEqual(response.status_code, 200, response.body)
+
+    async def test_multi_chat_overlap_is_rejected_with_existing_service_preserved(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "100,101"
+        raw["groups"].append({"id": "g2", "platform_id": "bot", "group_id": "101,200", "server_ids": ["server1"]})
+        original = self.plugin.service
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("重复绑定", response.body.decode())
+        self.assertIs(self.plugin.service, original)
 
     async def test_registered_routes_and_unload_cleanup(self):
         self.assertEqual(len(self.context.registered_web_apis), 6)
@@ -825,9 +868,16 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         file_before = file_path.read_bytes()
         self.FakeRcon.commands.clear()
         commands = [
-            "/mc 移除 1", "/mc 移除 Steve", "/mc 删除 1", "/mc remove Steve",
-            "/mc 修改 1 Alex", "/mc edit Steve Alex",
-            "/mc 日志", "/mc 同步", "/mc 导入", "/mc 重启 server1",
+            "/mc 移除 1",
+            "/mc 移除 Steve",
+            "/mc 删除 1",
+            "/mc remove Steve",
+            "/mc 修改 1 Alex",
+            "/mc edit Steve Alex",
+            "/mc 日志",
+            "/mc 同步",
+            "/mc 导入",
+            "/mc 重启 server1",
         ]
         for command in commands:
             with self.subTest(command=command):

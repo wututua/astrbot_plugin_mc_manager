@@ -91,6 +91,25 @@ def aliases(value: Any) -> list[str]:
     return [x.strip() for x in str(value).replace("，", ",").split(",") if x.strip()]
 
 
+def group_ids(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (str, int, list)) or isinstance(value, bool):
+        raise MCError("群号必须是文本、数字或群号列表，多个群用逗号或换行分隔。")
+    values = value if isinstance(value, list) else [value]
+    result = []
+    for item in values:
+        if not isinstance(item, (str, int)) or isinstance(item, bool):
+            raise MCError("群号列表只能包含文本或数字。")
+        for token in re.split(r"[,，\r\n]+", str(item)):
+            token = token.strip()
+            if token and (any(c.isspace() or ord(c) < 32 for c in token)):
+                raise MCError("单个群号不能包含空白或控制字符。")
+            if token and token not in result:
+                result.append(token)
+    return tuple(result)
+
+
 @dataclass(frozen=True)
 class Actor:
     platform: str
@@ -125,6 +144,10 @@ class Group:
     admins: tuple[str, ...] = ()
     max_entries: int = 1
     origin: str = ""
+
+    @property
+    def group_ids(self) -> tuple[str, ...]:
+        return group_ids(self.group_id)
 
 
 class Settings:
@@ -232,12 +255,12 @@ class Settings:
                 file_name,
             )
         self.groups: dict[str, Group] = {}
-        assigned: set[str] = set()
         bindings: set[tuple[str, str]] = set()
         for group_index, item in enumerate(raw.get("groups", []), start=1):
             gid = str(item.get("id") or "")
             platform = str(item.get("platform_id") or "").strip()
-            group_id = str(item.get("group_id") or "").strip()
+            identities = group_ids(item.get("group_id"))
+            group_id = ",".join(identities)
             servers = tuple(aliases(item.get("server_ids", [])))
             missing = []
             if not gid.strip():
@@ -256,17 +279,16 @@ class Settings:
                 )
             if gid in self.groups:
                 raise MCError(f"第 {group_index} 条群绑定的配置 ID {gid} 重复，请使用不同 ID 或删除重复项。")
-            if (platform, group_id) in bindings:
-                raise MCError("同一平台下的群不能重复绑定。")
+            if any((platform, identity) in bindings for identity in identities):
+                raise MCError("同一平台下的群不能重复绑定到多条配置；可在同一配置填写多个群号。")
             if not servers or len(set(servers)) != len(servers):
                 raise MCError(f"群 {gid} 的服务器集合为空或重复。")
             for sid in servers:
-                if sid not in self.servers or sid in assigned:
-                    raise MCError(f"服务器 {sid} 不存在或已经归属其他群。")
-                assigned.add(sid)
+                if sid not in self.servers:
+                    raise MCError(f"服务器 {sid} 不存在。")
             if len({self.servers[s].online_mode for s in servers}) > 1:
                 raise MCError(f"群 {gid} 的服务器必须使用相同 UUID 模式。")
-            bindings.add((platform, group_id))
+            bindings.update((platform, identity) for identity in identities)
             self.groups[gid] = Group(
                 gid,
                 platform,
@@ -277,11 +299,27 @@ class Settings:
                 str(item.get("broadcast_origin", "")),
             )
 
+        self.server_groups = {
+            sid: tuple(group for group in self.groups.values() if sid in group.servers) for sid in self.servers
+        }
+
+    def related_groups(self, group: Group) -> list[Group]:
+        selected = {group.id}
+        pending = [group]
+        while pending:
+            current = pending.pop()
+            for sid in current.servers:
+                for neighbor in self.server_groups[sid]:
+                    if neighbor.id not in selected:
+                        selected.add(neighbor.id)
+                        pending.append(neighbor)
+        return [candidate for candidate in self.groups.values() if candidate.id in selected]
+
     def group_for(self, actor: Actor) -> Group:
         if not actor.group:
             raise MCError("MC 功能仅允许在绑定的群聊中使用。")
         for group in self.groups.values():
-            if (group.platform, group.group_id) == (actor.platform, actor.group):
+            if group.platform == actor.platform and actor.group in group.group_ids:
                 return group
         raise MCError("本群未绑定 MC 服务器，请联系管理员配置。")
 
@@ -289,7 +327,8 @@ class Settings:
         return (
             isinstance(actor.user, str)
             and bool(actor.user.strip())
-            and (actor.platform, actor.group) == (group.platform, group.group_id)
+            and actor.platform == group.platform
+            and actor.group in group.group_ids
             and (actor.admin is True or actor.user in group.admins)
         )
 

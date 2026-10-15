@@ -235,7 +235,7 @@ class MCManagerPlugin(Star):
                 group = self._group(str(payload.get("group", "")))
                 # The dashboard operator is distinct from every chat user.
                 actor = Actor(
-                    group.platform, group.group_id, "dashboard:" + request.username, request.username, True, ""
+                    group.platform, group.group_ids[0], "dashboard:" + request.username, request.username, True, ""
                 )
                 result = await self._service().execute(actor, action, args)
                 return json_response({"message": result})

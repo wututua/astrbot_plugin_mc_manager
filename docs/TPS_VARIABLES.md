@@ -95,7 +95,7 @@ MC 进程 CPU：{cpu_process_1m}%
 默认配置文件用途：
 
 - [config.default.json](../config.default.json)：完整默认配置，新部署使用；服务端与群绑定为空，需要填写实际信息。
-- [config.example.json](../config.example.json)：包含两群五服、RCON 端口和环境变量密码引用的完整配置示例。
+- [config.example.json](../config.example.json)：包含多个群号、共享服务器、RCON 端口和环境变量密码引用的完整配置示例。
 - [tps.variables.json](../tps.variables.json)：机器可读的变量清单，包含名称、说明、单位与示例值。
 
 已有部署请保留原有服务器目录、群绑定、密码与权限配置，修改 TPS 相关字段即可。已有的自定义模板不会在普通升级时自动重置。旧模板中的 `{result}` 仍能显示原始输出。

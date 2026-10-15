@@ -96,7 +96,7 @@ async function loadSnapshot(probe) {
   $('configuration-error').hidden = !snapshot.config_error;
   $('configuration-error').textContent = snapshot.config_error ? '配置待修正：' + snapshot.config_error : '';
   $('server-count').textContent = snapshot.servers.length;
-  $('group-count').textContent = snapshot.groups.length;
+  $('group-count').textContent = snapshot.groups.reduce((total, group) => total + (group.group_ids?.length || 1), 0);
   $('pending-count').textContent = snapshot.servers.filter(s => s.pending).length;
   $('notification-count').textContent = snapshot.notifications_pending;
   const selected = $('group').value;
@@ -110,7 +110,7 @@ async function loadSnapshot(probe) {
   else if (snapshot.groups.some(g => g.id === selected)) $('group').value = selected;
   else $('group').value = snapshot.groups[0].id;
   const group = snapshot.groups.find(g => g.id === $('group').value);
-  $('group-info').textContent = group ? `${group.server_ids.length} 台服务器 · ${group.entries} 条白名单 · ${group.broadcast_ready ? '群广播已就绪' : '在群内发送一次 /mc 以记录广播会话'}` : '';
+  $('group-info').textContent = group ? `${group.server_ids.length} 台服务器 · ${group.entries} 条白名单 · ${group.broadcast_ready ? `已记录 ${group.broadcast_group_ids?.length || 1}/${group.group_ids?.length || 1} 个群的广播会话` : '在各群内发送一次 /mc 以记录广播会话'}` : '';
   renderServers();
 }
 async function loadEntries() {
