@@ -104,13 +104,17 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.modules["astrbot.api.message_components"].Plain = Plain
         self.modules["astrbot.api.event"].MessageChain = MessageChain
         self.modules["astrbot.api.event"].AstrMessageEvent = object
-        self.modules["astrbot.api.event"].filter = types.SimpleNamespace(
-            CustomFilter=object, custom_filter=lambda _: lambda fn: fn
-        )
+        from command_runtime import make_command_runtime
+
+        self.command_runtime = make_command_runtime(RELEASE_ROOT)
+        self.modules["astrbot.api.event"].filter = self.command_runtime.api_filter
         module_spec = importlib.util.spec_from_file_location("adapter_fixture.main", ROOT / "main.py")
         self.main = importlib.util.module_from_spec(module_spec)
         sys.modules["adapter_fixture.main"] = self.main
         module_spec.loader.exec_module(self.main)
+        self.command_runtime.namespace["star_map"]["adapter_fixture.main"] = types.SimpleNamespace(
+            name="astrbot_plugin_mc_manager", activated=True, reserved=False
+        )
         self.main.ServiceOriginal = self.main.Service
         from test_core import FakeRcon
 
@@ -662,3 +666,122 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.plugin.config_error, "")
         self.assertEqual(self.plugin._config_bindings()["servers"], [])
         self.assertEqual(self.plugin._config_bindings()["groups"][0]["active"], 0)
+
+    async def dispatch_command(self, text, *, group="100", platform="bot", user="member", wake_prefix=None):
+        from command_runtime import CommandEvent, wake_event
+
+        event = CommandEvent(text, self.command_runtime.namespace["MessageType"].GROUP_MESSAGE, group, platform, user)
+        handlers = await wake_event(self.command_runtime, event, wake_prefix=wake_prefix)
+        results = []
+        for handler in handlers:
+            kwargs = event.get_extra("handlers_parsed_params", {}).get(handler.handler_full_name, {})
+            async for result in handler.handler(self.plugin, event, **kwargs):
+                results.append(result)
+        return event, handlers, results
+
+    async def test_mc_is_present_in_real_command_registry_with_native_filter(self):
+        handlers = self.command_runtime.registry.get_handlers_by_event_type(
+            self.command_runtime.namespace["EventType"].AdapterMessageEvent
+        )
+        self.assertEqual(len(handlers), 1)
+        native = [item for item in handlers[0].event_filters if isinstance(item, self.command_runtime.command_filter)]
+        self.assertEqual(len(native), 1)
+        self.assertEqual(native[0].command_name, "mc")
+        self.assertEqual(native[0].get_complete_command_names(), ["mc"])
+        self.assertIsInstance(handlers[0].event_filters[0], self.main.MCCommandFilter)
+        self.assertIn("/mc", handlers[0].desc)
+
+    async def test_slash_mc_and_both_help_aliases_wake_and_reply_once(self):
+        for text in ["/mc", "/mc help", "/mc 帮助"]:
+            with self.subTest(text=text):
+                event, handlers, results = await self.dispatch_command(text)
+                self.assertTrue(event.is_wake)
+                self.assertEqual(len(handlers), 1)
+                self.assertEqual(len(results), 1)
+                self.assertIn("Minecraft 管理菜单", results[0])
+
+    async def test_plain_mc_and_slash_mc_work_with_different_global_wake_prefix(self):
+        for text in ["mc", "/mc", "MC HELP"]:
+            with self.subTest(text=text):
+                event, handlers, results = await self.dispatch_command(text, wake_prefix=["!"])
+                self.assertTrue(event.is_wake)
+                self.assertEqual(len(handlers), 1)
+                self.assertIn("Minecraft 管理菜单", results[0])
+
+    async def test_mc_still_works_when_global_wake_prefix_consumes_its_name(self):
+        for text, prefixes in [("/mc", ["/mc"]), ("/mc help", ["/mc"]), ("mc 帮助", ["mc"]), ("/mc 查看", ["/mc "])]:
+            with self.subTest(text=text, prefixes=prefixes):
+                _, handlers, results = await self.dispatch_command(text, wake_prefix=prefixes)
+                self.assertEqual(len(handlers), 1)
+                self.assertEqual(len(results), 1)
+                self.assertNotIn("未知子指令", results[0])
+
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["commands"] = {"add": "mc"}
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        _, handlers, results = await self.dispatch_command("/mc mc Steve", wake_prefix=["/mc"])
+        self.assertEqual(len(handlers), 1)
+        self.assertIn("已添加 #1 Steve", results[0])
+
+    async def test_registered_command_preserves_all_add_list_remove_arguments(self):
+        _, _, result = await self.dispatch_command("/mc 添加 Steve")
+        self.assertIn("已添加 #1 Steve", result[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["name"], "Steve")
+        _, _, result = await self.dispatch_command("/mc 查看 1")
+        self.assertIn("#1 Steve", result[0])
+        _, _, result = await self.dispatch_command("/mc 修改 1 Alex")
+        self.assertIn("Steve → Alex", result[0])
+        _, _, result = await self.dispatch_command("/mc 移除 1")
+        self.assertIn("已移除 #1 Alex", result[0])
+        self.assertEqual(self.plugin.service.store.entries("g1"), [])
+
+    async def test_custom_prefix_routes_through_native_mc_and_fixed_mc_still_works(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["commands"] = {"prefix": "minecraft,我的世界", "add": "add,申请"}
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200)
+        for text in ["/minecraft", "我的世界 帮助", "/mc help"]:
+            event, handlers, results = await self.dispatch_command(text)
+            self.assertEqual(len(handlers), 1)
+            self.assertEqual(len(results), 1)
+            self.assertIn("Minecraft 管理菜单", results[0])
+            self.assertEqual(event.message_str.split()[0], "mc")
+        _, _, result = await self.dispatch_command("/minecraft add Steve")
+        self.assertIn("已添加 #1 Steve", result[0])
+
+    async def test_near_prefix_matches_do_not_wake_or_write(self):
+        for text in ["mctps", "/mcfoo 添加 Steve", "有人说 mc 添加 Steve", "/m c", ""]:
+            event, handlers, results = await self.dispatch_command(text)
+            self.assertEqual(handlers, [])
+            self.assertEqual(results, [])
+        self.assertEqual(self.plugin.service.store.entries("g1"), [])
+
+    async def test_native_command_disable_blocks_fixed_and_custom_prefixes(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["commands"] = {"prefix": "minecraft"}
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        metadata = next(iter(self.command_runtime.registry.star_handlers_map.values()))
+        metadata.enabled = False
+        for text in ["/mc", "mc", "/minecraft", "minecraft"]:
+            _, handlers, results = await self.dispatch_command(text)
+            self.assertEqual(handlers, [])
+            self.assertEqual(results, [])
+        self.assertEqual(self.plugin.service.store.entries("g1"), [])
+
+    async def test_registered_command_does_not_bypass_group_or_owner_permissions(self):
+        _, _, results = await self.dispatch_command("/mc 添加 Steve", group="unbound")
+        self.assertIn("未绑定", results[0])
+        _, _, results = await self.dispatch_command("/mc 添加 Steve", group="")
+        self.assertIn("仅允许在绑定的群聊", results[0])
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        _, _, results = await self.dispatch_command("/mc 移除 1", user="other")
+        self.assertIn("自己的", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["name"], "Steve")
+
+    async def test_registered_mc_shows_configuration_repair_error_when_setup_invalid(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = ""
+        await self.recovery_plugin(raw)
+        _, handlers, results = await self.dispatch_command("/mc")
+        self.assertEqual(len(handlers), 1)
+        self.assertIn("配置待修正", results[0])

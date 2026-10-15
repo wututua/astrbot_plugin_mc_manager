@@ -181,7 +181,7 @@
         "description": "主指令别名",
         "type": "string",
         "default": "mc",
-        "hint": "逗号分隔；不含开头的 /。"
+        "hint": "自定义主指令别名，逗号分隔、不带 /。mc 是正式注册的固定入口，修改此项后 /mc 仍可用。"
       },
       "help": {
         "description": "帮助子指令别名",

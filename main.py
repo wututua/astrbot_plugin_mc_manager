@@ -23,7 +23,28 @@ class MCCommandFilter(filter.CustomFilter):
     settings: Settings | None = None
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
-        return bool(self.settings and self.settings.extract(event.get_message_str()) is not None)
+        if self.settings is None:
+            return False
+        prefixes = {"mc", *(prefix.casefold() for prefix in self.settings.prefixes)}
+        original = getattr(event.message_obj, "message_str", "")
+        candidates = [event.get_message_str()]
+        if isinstance(original, str) and event.is_at_or_wake_command:
+            candidates.insert(0, original)
+        words = []
+        for candidate in candidates:
+            parts = candidate.strip().split(maxsplit=1)
+            if parts and parts[0].removeprefix("/").casefold() in prefixes:
+                words = parts
+                break
+        if not words:
+            return False
+        text = words[1] if len(words) > 1 else ""
+        event.set_extra("mc_manager_arguments", text)
+        # This filter runs before the native CommandFilter. Normalize aliases
+        # into the one registered command, and wake only an exact command token.
+        event.message_str = "mc" + (" " + text if text else "")
+        event.is_at_or_wake_command = True
+        return True
 
 
 class MCManagerPlugin(Star):
@@ -98,11 +119,14 @@ class MCManagerPlugin(Star):
             raise MCError("插件尚未初始化或已卸载。")
         return self.service
 
+    @filter.command("mc")
     @filter.custom_filter(MCCommandFilter)
     async def mc(self, event: AstrMessageEvent):
-        text = self.settings.extract(event.get_message_str())
+        """Minecraft 管理：/mc [帮助/添加/查看/移除/玩家/tps/重启]，主指令别名可配置。"""
+        text = event.get_extra("mc_manager_arguments", default=None)
         if text is None:
-            return
+            words = event.get_message_str().strip().split(maxsplit=1)
+            text = words[1] if len(words) > 1 else ""
         event.stop_event()
         actor = Actor(
             str(event.get_platform_id() or ""),
