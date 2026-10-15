@@ -116,6 +116,51 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         await self.execute("remove", ["1"], self.admin)
         self.assertEqual(self.file_names("s1"), [])
 
+    async def test_truthy_non_boolean_admin_flag_cannot_bypass_ownership(self):
+        await self.execute("add", ["Steve"])
+        before = self.service.store.entries("g1")
+        for flag in ["false", "admin", 1]:
+            actor = Actor("bot", "100", "user2", admin=flag)
+            for action, args in [("remove", ["1"]), ("modify", ["Steve", "Alex"]), ("logs", [])]:
+                with self.subTest(flag=flag, action=action), self.assertRaises(MCError):
+                    await self.execute(action, args, actor)
+                self.assertEqual(self.service.store.entries("g1"), before)
+
+    async def test_missing_sender_identity_is_rejected_even_with_admin_flag(self):
+        await self.execute("add", ["Steve"])
+        before = self.service.store.entries("g1")
+        for user in ["", "   "]:
+            actor = Actor("bot", "100", user, admin=True)
+            for action, args in [("add", ["Alex"]), ("remove", ["1"]), ("modify", ["1", "Alex"]), ("logs", [])]:
+                with self.subTest(user=user, action=action), self.assertRaisesRegex(MCError, "身份"):
+                    await self.execute(action, args, actor)
+                self.assertEqual(self.service.store.entries("g1"), before)
+
+    async def test_other_group_admin_cannot_remove_or_modify_entries(self):
+        await self.execute("add", ["Steve"])
+        actor = Actor("bot", "100", "admin2")
+        for action, args in [("remove", ["1"]), ("remove", ["Steve"]), ("modify", ["1", "Alex"])]:
+            with self.subTest(action=action, args=args), self.assertRaisesRegex(MCError, "自己的"):
+                await self.execute(action, args, actor)
+        self.assertEqual(self.service.store.entries("g1")[0]["owner"], "user1")
+
+    async def test_owner_change_during_player_lookup_cannot_modify_new_owners_entry(self):
+        await self.execute("add", ["Steve"])
+        logs_before = self.service.store.logs("g1", 1, 100)
+
+        async def resolve_with_owner_change(group, name):
+            with self.service.store.transaction():
+                self.service.store.db.execute("UPDATE entries SET owner='user2' WHERE scope='g1' AND id=1")
+            return name, offline_uuid(name)
+
+        with patch.object(self.service, "resolve_player", side_effect=resolve_with_owner_change):
+            with self.assertRaisesRegex(MCError, "归属|自己的|权限"):
+                await self.execute("modify", ["1", "Alex"])
+        row = self.service.store.entries("g1")[0]
+        self.assertEqual((row["name"], row["owner"]), ("Steve", "user2"))
+        self.assertEqual(self.file_names("s1"), ["Steve"])
+        self.assertEqual(self.service.store.logs("g1", 1, 100), logs_before)
+
     async def test_stable_numbers_persist_across_deletion_and_reload(self):
         await self.execute("add", ["Steve"])
         await self.execute("remove", ["1"])

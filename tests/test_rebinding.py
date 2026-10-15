@@ -145,8 +145,9 @@ class RebindingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((row["name"], row["id"], row["owner"]), ("Steve", 1, ""))
         with self.assertRaisesRegex(MCError, "自己的"):
             await self.service.execute(Actor("other-bot", "300", "member"), "remove", ["1"])
-        with self.assertRaisesRegex(MCError, "自己的"):
+        with self.assertRaisesRegex(MCError, "身份"):
             await self.service.execute(Actor("other-bot", "300", ""), "remove", ["1"])
+        self.assertEqual(self.service.store.entries("g1"), [row])
         logs, _ = self.service.store.logs("g1", 1, 100)
         self.assertTrue(
             any(row["action"] == "add" and row["platform"] == "bot" and row["user"] == "member" for row in logs)

@@ -205,11 +205,11 @@ class ReleaseTests(unittest.TestCase):
     def test_release_zip_contains_install_files_and_consistent_version(self):
         with tempfile.TemporaryDirectory() as temp:
             path = build(Path(temp))
-            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.2.1.zip")
+            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.2.2.zip")
             with ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 metadata = validate_metadata(yaml.safe_load(archive.read("astrbot_plugin_mc_manager/metadata.yaml")))
-                self.assertEqual(metadata["version"], "v1.2.1")
+                self.assertEqual(metadata["version"], "v1.2.2")
                 for name in (
                     "main.py",
                     "_conf_schema.json",
@@ -250,7 +250,7 @@ class ReleaseTests(unittest.TestCase):
             inspector = official_archive_inspector(directory)
             inspected = inspector.inspect_plugin_archive(str(path))
             self.assertEqual(inspected["metadata"]["name"], "astrbot_plugin_mc_manager")
-            self.assertEqual(inspected["metadata"]["version"], "v1.2.1")
+            self.assertEqual(inspected["metadata"]["version"], "v1.2.2")
             destination = directory / "installed"
             getattr(inspector(), EXTRACT_METHOD)(str(path), str(destination))
             for name in ("main.py", "metadata.yaml", "_conf_schema.json", "pages/console/index.html"):

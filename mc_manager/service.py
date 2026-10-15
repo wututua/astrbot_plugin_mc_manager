@@ -272,6 +272,8 @@ class Service:
         if self.closed:
             raise MCError("插件正在卸载。")
         group = self.settings.group_for(actor)
+        if not isinstance(actor.user, str) or not actor.user.strip():
+            raise MCError("无法确认发送者身份，请使用可识别账号的群聊消息重试。")
         self.store.remember(group.id, actor.origin)
         admin_actions = {"logs", "restart", "sync", "import"}
         if action in admin_actions:
@@ -404,7 +406,12 @@ class Service:
                 values = dict(id=row["id"], player=row["name"])
                 if action == "remove":
                     with self.store.transaction():
-                        self.store.db.execute("DELETE FROM entries WHERE scope=? AND id=?", (group.id, row["id"]))
+                        deleted = self.store.db.execute(
+                            "DELETE FROM entries WHERE scope=? AND id=? AND (owner=? OR ?=1)",
+                            (group.id, row["id"], actor.user, int(self.settings.is_admin(actor, group))),
+                        )
+                        if deleted.rowcount != 1:
+                            raise MCError("条目归属已变化或权限不足，请重新查看白名单。")
                         self.store.audit(
                             group, actor, "remove", row["name"], f"#{row['id']}; 原归属={row['owner'] or '历史导入'}"
                         )
@@ -413,10 +420,12 @@ class Service:
                     name, identifier = await self.resolve_player(group, args[1])
                     try:
                         with self.store.transaction():
-                            self.store.db.execute(
-                                "UPDATE entries SET name=?,uuid=? WHERE scope=? AND id=?",
-                                (name, identifier, group.id, row["id"]),
+                            updated = self.store.db.execute(
+                                "UPDATE entries SET name=?,uuid=? WHERE scope=? AND id=? AND (owner=? OR ?=1)",
+                                (name, identifier, group.id, row["id"], actor.user, int(self.settings.is_admin(actor, group))),
                             )
+                            if updated.rowcount != 1:
+                                raise MCError("条目归属已变化或权限不足，请重新查看白名单。")
                             self.store.audit(
                                 group,
                                 actor,

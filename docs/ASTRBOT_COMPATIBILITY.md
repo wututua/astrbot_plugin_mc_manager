@@ -1,6 +1,6 @@
 # AstrBot 4.28+ 接口适配说明
 
-v1.2.1 的最低支持版本为 **AstrBot 4.28.0**，元数据声明 `>=4.28.0,<5`。Python 要求为 3.12+。本次范围是插件实际使用的全部 AstrBot 接口，包括聊天、网页、配置和生命周期。
+v1.2.2 的最低支持版本为 **AstrBot 4.28.0**，元数据声明 `>=4.28.0,<5`。Python 要求为 3.12+。本次范围是插件实际使用的全部 AstrBot 接口，包括聊天、网页、配置和生命周期。
 
 ## 核对范围
 
@@ -11,6 +11,7 @@ v1.2.1 的最低支持版本为 **AstrBot 4.28.0**，元数据声明 `>=4.28.0,<
 | 初始化与卸载 | `initialize` 中注册管理 API；配置有效时启动服务，配置待修正时保留页面；`terminate` 结束后台任务并清理当前实例路由 |
 | 指令入口 | 公开 `filter.command("mc")` 正式注册；前置 CustomFilter 只匹配完整主指令，将可配置别名规范化后交给同一个原生命令过滤器 |
 | 群与用户身份 | `get_platform_id/get_group_id/get_sender_id/get_sender_name/is_admin`；群隔离继续比较平台实例 ID 和群号 |
+| 全局管理员复核 | `Context.get_config(event.unified_msg_origin)` 获取会话实际 `admins_id`，与布尔 `is_admin()` 同时核对；遵守 API Key 管理员降权标记 |
 | 广播会话 | `unified_msg_origin`，保持框架消息会话格式 |
 | 消息发送 | `MessageChain().message(text)`，通过 `Context.send_message` 投递 |
 | 插件数据目录 | `StarTools.get_data_dir`，保留 `plugin_data/astrbot_plugin_mc_manager` |
@@ -37,7 +38,7 @@ CSS 与 JavaScript 同样复制。构建会逐文件核对两套入口内容一�
 ## 升级
 
 1. 先将 AstrBot 升级到 4.28.0 或更新的 4.x 正式版本。
-2. 导入 `astrbot_plugin_mc_manager-1.2.1.zip` 更新插件。
+2. 导入 `astrbot_plugin_mc_manager-1.2.2.zip` 更新插件。
 3. 重载插件并刷新管理页面。
 4. 检查服务器状态，在绑定群发送 `/mc` 和 `/mc tps` 验证。
 

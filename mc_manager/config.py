@@ -286,7 +286,12 @@ class Settings:
         raise MCError("本群未绑定 MC 服务器，请联系管理员配置。")
 
     def is_admin(self, actor: Actor, group: Group) -> bool:
-        return actor.admin or actor.user in group.admins
+        return (
+            isinstance(actor.user, str)
+            and bool(actor.user.strip())
+            and (actor.platform, actor.group) == (group.platform, group.group_id)
+            and (actor.admin is True or actor.user in group.admins)
+        )
 
     def extract(self, text: str) -> str | None:
         words = text.strip().split(maxsplit=1)

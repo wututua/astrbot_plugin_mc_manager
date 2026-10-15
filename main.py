@@ -119,6 +119,20 @@ class MCManagerPlugin(Star):
             raise MCError("插件尚未初始化或已卸载。")
         return self.service
 
+    def _verified_chat_admin(self, event: AstrMessageEvent, user: str) -> bool:
+        # event.role is mutable shared state. Confirm elevated chat privileges
+        # against the effective session configuration, never a truthy flag alone.
+        if not user.strip() or event.is_admin() is not True:
+            return False
+        if event.get_extra("_api_key_allow_admin_role", default=None) is False:
+            return False
+        try:
+            configured = self.context.get_config(event.unified_msg_origin).get("admins_id", [])
+        except Exception:
+            self.logger.warning("无法核对 AstrBot 管理员配置，本次不授予全局管理权限。")
+            return False
+        return isinstance(configured, list) and any(isinstance(value, str) and value == user for value in configured)
+
     @filter.command("mc")
     @filter.custom_filter(MCCommandFilter)
     async def mc(self, event: AstrMessageEvent):
@@ -128,15 +142,16 @@ class MCManagerPlugin(Star):
             words = event.get_message_str().strip().split(maxsplit=1)
             text = words[1] if len(words) > 1 else ""
         event.stop_event()
-        actor = Actor(
-            str(event.get_platform_id() or ""),
-            str(event.get_group_id() or ""),
-            str(event.get_sender_id() or ""),
-            event.get_sender_name(),
-            bool(event.is_admin()),
-            event.unified_msg_origin,
-        )
         try:
+            user = str(event.get_sender_id() or "")
+            actor = Actor(
+                str(event.get_platform_id() or ""),
+                str(event.get_group_id() or ""),
+                user,
+                event.get_sender_name(),
+                self._verified_chat_admin(event, user),
+                event.unified_msg_origin,
+            )
             async with self.guard:
                 action, args = self.settings.route(text)
                 result = await self._service().execute(actor, action, args)

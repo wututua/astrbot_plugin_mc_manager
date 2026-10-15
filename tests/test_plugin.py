@@ -137,6 +137,10 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
             async def send_message(inner, origin, chain):
                 return True
 
+            def get_config(inner, umo=None):
+                return self.astrbot_config
+
+        self.astrbot_config = {"admins_id": ["admin"]}
         self.context = Context()
         config = Config(
             {
@@ -667,10 +671,15 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.plugin._config_bindings()["servers"], [])
         self.assertEqual(self.plugin._config_bindings()["groups"][0]["active"], 0)
 
-    async def dispatch_command(self, text, *, group="100", platform="bot", user="member", wake_prefix=None):
+    async def dispatch_command(
+        self, text, *, group="100", platform="bot", user="member", wake_prefix=None, event_role="member", extras=None
+    ):
         from command_runtime import CommandEvent, wake_event
 
         event = CommandEvent(text, self.command_runtime.namespace["MessageType"].GROUP_MESSAGE, group, platform, user)
+        event.role = event_role
+        for key, value in (extras or {}).items():
+            event.set_extra(key, value)
         handlers = await wake_event(self.command_runtime, event, wake_prefix=wake_prefix)
         results = []
         for handler in handlers:
@@ -777,6 +786,105 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         _, _, results = await self.dispatch_command("/mc 移除 1", user="other")
         self.assertIn("自己的", results[0])
         self.assertEqual(self.plugin.service.store.entries("g1")[0]["name"], "Steve")
+
+    async def test_chat_admin_role_requires_configured_identity_for_all_mutations(self):
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        entries_before = self.plugin.service.store.entries("g1")
+        logs_before = self.plugin.service.store.logs("g1", 1, 100)
+        file_path = self.root / "server1" / "whitelist.json"
+        file_before = file_path.read_bytes()
+        self.FakeRcon.commands.clear()
+        commands = [
+            "/mc 移除 1", "/mc 移除 Steve", "/mc 删除 1", "/mc remove Steve",
+            "/mc 修改 1 Alex", "/mc edit Steve Alex",
+            "/mc 日志", "/mc 同步", "/mc 导入", "/mc 重启 server1",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                _, _, results = await self.dispatch_command(command, user="other", event_role="admin")
+                self.assertIn("MC 操作失败", results[0])
+                self.assertEqual(self.plugin.service.store.entries("g1"), entries_before)
+                self.assertEqual(self.plugin.service.store.logs("g1", 1, 100), logs_before)
+                self.assertEqual(file_path.read_bytes(), file_before)
+                self.assertEqual(self.FakeRcon.commands, [])
+
+    async def test_truthy_non_boolean_admin_result_does_not_grant_permissions(self):
+        from command_runtime import CommandEvent
+
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        for value in ["false", "admin", 1]:
+            with self.subTest(value=value), patch.object(CommandEvent, "is_admin", return_value=value):
+                _, _, results = await self.dispatch_command("/mc 移除 1", user="other")
+                self.assertIn("自己的", results[0])
+                self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "owner")
+
+    async def test_configured_global_admin_can_modify_and_remove_other_entries(self):
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        _, _, results = await self.dispatch_command("/mc 修改 1 Alex", user="admin")
+        self.assertIn("已修改", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "owner")
+        _, _, results = await self.dispatch_command("/mc 移除 1", user="admin")
+        self.assertIn("已移除", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1"), [])
+
+    async def test_group_admin_permission_does_not_require_global_role(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["admin_ids"] = ["group-admin"]
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        _, _, results = await self.dispatch_command("/mc 移除 1", user="group-admin")
+        self.assertIn("已移除", results[0])
+
+    async def test_api_key_admin_downgrade_cannot_be_overridden_by_stale_role(self):
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        _, _, results = await self.dispatch_command(
+            "/mc 移除 1", user="admin", event_role="admin", extras={"_api_key_allow_admin_role": False}
+        )
+        self.assertIn("自己的", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "owner")
+
+    async def test_global_admin_config_error_does_not_grant_access(self):
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        with patch.object(self.context, "get_config", side_effect=RuntimeError("config unavailable")):
+            _, _, results = await self.dispatch_command("/mc 移除 1", user="admin")
+        self.assertIn("自己的", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "owner")
+
+    async def test_malformed_global_admin_list_does_not_use_substring_membership(self):
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        self.astrbot_config["admins_id"] = "prefix-other-suffix"
+        _, _, results = await self.dispatch_command("/mc 移除 1", user="other", event_role="admin")
+        self.assertIn("自己的", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "owner")
+
+    async def test_custom_command_aliases_enforce_ownership_with_stale_admin_role(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["commands"] = {"prefix": "minecraft", "remove": "drop", "modify": "rename"}
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.dispatch_command("/mc 添加 Steve", user="owner")
+        before = self.plugin.service.store.entries("g1")
+        for command in ["/mc drop 1", "/minecraft drop Steve", "minecraft rename 1 Alex"]:
+            with self.subTest(command=command):
+                _, _, results = await self.dispatch_command(command, user="other", event_role="admin")
+                self.assertIn("自己的", results[0])
+                self.assertEqual(self.plugin.service.store.entries("g1"), before)
+        _, _, results = await self.dispatch_command("/minecraft drop Steve", user="owner")
+        self.assertIn("已移除", results[0])
+
+    async def test_chat_member_cannot_remove_dashboard_owned_entry(self):
+        with self.bound_request({"group": "g1", "action": "add", "args": ["Steve"]}):
+            self.assertEqual((await self.plugin.page_action()).status_code, 200)
+        _, _, results = await self.dispatch_command("/mc 移除 1", user="other", event_role="admin")
+        self.assertIn("自己的", results[0])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["owner"], "dashboard:admin")
+
+    async def test_chat_without_sender_identity_does_not_create_whitelist_entries(self):
+        for role in ["member", "admin"]:
+            with self.subTest(role=role):
+                _, _, results = await self.dispatch_command("/mc 添加 Steve", user="", event_role=role)
+                self.assertIn("身份", results[0])
+                self.assertEqual(self.plugin.service.store.entries("g1"), [])
+                self.assertFalse(self.plugin.service.store.initialized("g1"))
 
     async def test_registered_mc_shows_configuration_repair_error_when_setup_invalid(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))

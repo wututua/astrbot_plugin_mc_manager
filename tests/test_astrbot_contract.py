@@ -118,6 +118,22 @@ class AstrBotContractTests(unittest.IsolatedAsyncioTestCase):
         event.role = "member"
         self.assertFalse(event.is_admin())
 
+    def test_context_get_config_uses_effective_session_admin_list(self):
+        context_type = compile_class("core/star/context.py", "Context", {"get_config"}, {})
+        context = context_type()
+        context._config = {"admins_id": ["default-admin"]}
+        requested = []
+        session_config = {"admins_id": ["session-admin"]}
+
+        def get_conf(origin):
+            requested.append(origin)
+            return session_config
+
+        context.astrbot_config_mgr = types.SimpleNamespace(get_conf=get_conf)
+        self.assertIs(context.get_config(), context._config)
+        self.assertIs(context.get_config("qq-bot:GroupMessage:100"), session_config)
+        self.assertEqual(requested, ["qq-bot:GroupMessage:100"])
+
     def test_web_api_registration_replaces_only_matching_method_and_route(self):
         context_type = compile_class("core/star/context.py", "Context", {"register_web_api"}, {})
         context = context_type()
