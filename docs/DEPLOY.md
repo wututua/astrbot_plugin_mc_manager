@@ -48,7 +48,7 @@ $env:MC_RCON_2 = '你的 server2 RCON 密码'
 
 ## 3. 安装与填写配置
 
-安装 `astrbot_plugin_mc_manager-1.0.2.zip` 后，在 AstrBot 插件配置页逐项填写。完整示例是根目录 `config.example.json`，可复制到管理面板的配置编辑器后按实际值修改。
+安装 `astrbot_plugin_mc_manager-1.0.3.zip` 后，在 AstrBot 插件配置页逐项填写。完整示例是根目录 `config.example.json`，可复制到管理面板的配置编辑器后按实际值修改。
 
 群配置示例：
 
@@ -136,3 +136,7 @@ done
 更新插件时保留插件数据目录。停用插件后再复制 `mc.sqlite3`，如 WAL/SHM 文件仍存在则一并复制；在仍有运行实例时，应使用 SQLite 的 backup API 取得一致快照。
 
 服务端 `.mcwl-backups` 只是文件备份，不包含群成员归属、编号和审计日志；完整恢复需要插件数据库。数据库丢失后重新初始导入只能恢复玩家条目，不能恢复原操作者归属与固定编号。
+
+## spark 指标与自定义回复
+
+默认查询命令改为 spark tps。更新已有插件时保留原来的群、目录和权限配置，在管理面板中点击“使用 spark 默认配置”后保存，或手动设置各服 tps_command 与 messages.tps。19 个指标变量、默认配置与可选采集器步骤见 [TPS_VARIABLES.md](TPS_VARIABLES.md)。

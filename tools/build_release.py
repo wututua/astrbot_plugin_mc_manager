@@ -9,8 +9,17 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-DIRECTORIES = ("mc_manager", "pages", ".astrbot-plugin", "docs")
-FILES = ("main.py", "metadata.yaml", "_conf_schema.json", "requirements.txt", "README.md", "config.example.json")
+DIRECTORIES = ("mc_manager", "pages", ".astrbot-plugin", "docs", "companion")
+FILES = (
+    "main.py",
+    "metadata.yaml",
+    "_conf_schema.json",
+    "requirements.txt",
+    "README.md",
+    "config.example.json",
+    "config.default.json",
+    "tps.variables.json",
+)
 REQUIRED_FIELDS = ("name", "desc", "version", "author")
 
 

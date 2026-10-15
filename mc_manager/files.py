@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -116,3 +117,24 @@ def write_whitelist(server: Server, entries: list[dict]) -> bool:
         if os.path.exists(temporary):
             os.unlink(temporary)
     return True
+
+
+def read_spark_report(server: Server, max_age: int) -> str:
+    directory = server.directory
+    path = directory / server.spark_file
+    if directory.resolve() != directory or not path.resolve().is_relative_to(directory):
+        raise MCError("spark 指标文件路径越过了本服目录。")
+    try:
+        stat = path.stat()
+        age = time.time() - stat.st_mtime
+        if stat.st_size > 128 * 1024:
+            raise MCError("spark 指标文件超过 128 KB。")
+        if age < -5:
+            raise MCError("spark 指标文件时间位于未来，请检查系统时钟。")
+        if age > max_age:
+            raise MCError(f"spark 指标文件已过期（{age:.1f} 秒），请检查服务端和采集器。")
+        return path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        raise MCError("未发现本地 spark 指标文件；如 spark 的 RCON 回复为空，请按文档启用附带的采集器。") from None
+    except (OSError, UnicodeError):
+        raise MCError("spark 指标文件无法读取，请检查目录权限与 UTF-8 编码。") from None

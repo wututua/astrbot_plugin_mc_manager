@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .spark import DEFAULT_TPS_ERROR, DEFAULT_TPS_TEMPLATE, DEFAULT_TPS_WARNING, SPARK_FIELDS
+from .text import safe_text
+
 
 class MCError(Exception):
     """An actionable message safe to show to users."""
@@ -35,7 +38,9 @@ MESSAGES = {
     "list": "本群白名单（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
     "entry": "#{id} {player} · 所属：{owner}",
     "players": "[{server}] 在线玩家：{result}",
-    "tps": "[{server}] TPS：{result}",
+    "tps": DEFAULT_TPS_TEMPLATE,
+    "tps_warning": DEFAULT_TPS_WARNING,
+    "tps_error": DEFAULT_TPS_ERROR,
     "status": "[{server}] {result}",
     "servers": "本群服务器：\n{entries}",
     "error": "MC 操作失败：{error}",
@@ -51,6 +56,7 @@ MESSAGES = {
 FIELDS = set(
     "prefix add list remove modify players tps status servers restart logs sync import help id player user old_player page pages total entries owner result server error time action group detail count seconds".split()
 )
+FIELDS.update(SPARK_FIELDS)
 NAME = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -71,13 +77,6 @@ def boolean(value: Any, label: str) -> bool:
     if not isinstance(value, bool):
         raise MCError(f"{label} 必须使用 JSON 布尔值 true 或 false。")
     return value
-
-
-def safe_text(value: Any, limit: int = 16000) -> str:
-    text = str(value)
-    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
-    text = re.sub(r"§[0-9a-fk-or]", "", text, flags=re.I)
-    return "".join(c for c in text if c in "\n\t" or ord(c) >= 32)[:limit]
 
 
 def player_name(value: str) -> str:
@@ -111,8 +110,10 @@ class Server:
     port: int
     password: str = field(repr=False)
     online_mode: bool = False
-    tps_command: str = "tps"
+    tps_command: str = "spark tps"
     players_command: str = "list"
+    tps_source: str = "auto"
+    spark_file: str = ".astrbot-spark-tps.txt"
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,14 @@ class Settings:
         self.restart_timeout = positive(raw.get("restart_timeout", 180), "重启超时", 5, 3600)
         self.poll_interval = positive(raw.get("poll_interval", 3), "重启检查间隔", 1, 30)
         self.game_broadcast = boolean(raw.get("game_broadcast", True), "游戏内广播")
+        self.tps_missing_value = raw.get("tps_missing_value", "暂无数据")
+        if (
+            not isinstance(self.tps_missing_value, str)
+            or not 1 <= len(self.tps_missing_value) <= 32
+            or any(c in self.tps_missing_value for c in "\r\n\x00")
+        ):
+            raise MCError("TPS 缺失值文字必须为 1～32 字符的单行文本。")
+        self.spark_file_max_age = positive(raw.get("spark_file_max_age", 10), "spark 文件最大有效秒数", 3, 300)
         self.commands = dict(ALIASES)
         self.commands.update(raw.get("commands", {}))
         self.prefixes = aliases(self.commands.get("prefix", "mc"))
@@ -187,9 +196,20 @@ class Settings:
             endpoints.add(endpoint)
             env = str(item.get("rcon_password_env", "")).strip()
             password = os.environ.get(env, "") if env else str(item.get("rcon_password", ""))
-            commands = [str(item.get("tps_command", "tps")), str(item.get("players_command", "list"))]
+            commands = [str(item.get("tps_command", "spark tps")), str(item.get("players_command", "list"))]
             if not host or any(not c or any(x in c for x in "\n\r\x00") or len(c) > 512 for c in commands):
                 raise MCError(f"服务器 {sid} 的 RCON 地址或查询命令无效。")
+            source = item.get("tps_source", "auto")
+            file_name = item.get("spark_file", ".astrbot-spark-tps.txt")
+            if source not in {"auto", "rcon", "file"}:
+                raise MCError("TPS 数据来源必须为 auto、rcon 或 file。")
+            if (
+                not isinstance(file_name, str)
+                or not file_name
+                or Path(file_name).is_absolute()
+                or not (path / file_name).resolve().is_relative_to(path)
+            ):
+                raise MCError("spark 指标文件必须是本服目录内的相对路径。")
             self.servers[sid] = Server(
                 sid,
                 str(item.get("name", sid)),
@@ -199,6 +219,8 @@ class Settings:
                 password,
                 boolean(item.get("online_mode", False), "UUID 模式"),
                 *commands,
+                source,
+                file_name,
             )
         self.groups: dict[str, Group] = {}
         assigned: set[str] = set()

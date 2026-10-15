@@ -11,6 +11,7 @@ from astrbot.api.web import error_response, json_response, request
 
 from .mc_manager.config import Actor, MCError, Settings, positive
 from .mc_manager.service import Service
+from .mc_manager.spark import DEFAULT_TPS_TEMPLATE, variables_table
 
 PLUGIN_NAME = "astrbot_plugin_mc_manager"
 
@@ -165,7 +166,14 @@ class MCManagerPlugin(Star):
                 payload = copy.deepcopy(dict(self.config))
                 for server in payload.get("servers", []):
                     server["rcon_password"] = "__KEEP__" if server.get("rcon_password") else ""
-                return json_response({"config": payload, "data_directory": str(self.data_dir)})
+                return json_response(
+                    {
+                        "config": payload,
+                        "data_directory": str(self.data_dir),
+                        "tps_default_template": DEFAULT_TPS_TEMPLATE,
+                        "tps_variables": variables_table(),
+                    }
+                )
         except MCError as exc:
             return error_response(str(exc))
 

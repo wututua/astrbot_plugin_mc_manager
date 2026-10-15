@@ -31,7 +31,7 @@ class FakeRcon:
 
     async def command(self, command):
         self.commands.append((self.server.id, command))
-        if command == "tps":
+        if command in {"tps", "spark tps"}:
             return "TPS from last 1m, 5m, 15m: 20.0, 19.9, 20.0"
         if command == "list":
             return "There are 1 of a max of 20 players online: Steve"

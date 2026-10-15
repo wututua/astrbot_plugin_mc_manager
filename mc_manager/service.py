@@ -11,8 +11,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Actor, Group, MCError, Settings, player_name, positive, safe_text
-from .files import lookup_uuid, offline_uuid, read_whitelist, write_whitelist
+from .files import lookup_uuid, offline_uuid, read_spark_report, read_whitelist, write_whitelist
 from .rcon import Rcon
+from .spark import parse_spark_tps
 from .store import Store
 
 
@@ -109,6 +110,17 @@ class Service:
         server = self.settings.servers[sid]
         if sid in self.restart_tasks:
             return "重启监控中"
+        file_error = ""
+        if kind == "tps" and server.tps_source in {"auto", "file"}:
+            try:
+                report = await asyncio.to_thread(read_spark_report, server, self.settings.spark_file_max_age)
+                if parse_spark_tps(report).status == "未解析":
+                    raise MCError("本地 spark 指标尚不可用，请检查 spark 是否启用及采集器日志。")
+                return safe_text(report, 6000).strip()
+            except MCError as exc:
+                file_error = str(exc)
+                if server.tps_source == "file":
+                    return file_error
         command = server.tps_command if kind == "tps" else server.players_command
         try:
             async with self.server_locks[sid]:
@@ -116,6 +128,10 @@ class Service:
                     result = safe_text(await client.command(command), 6000).strip()
             if not result:
                 result = "服务端返回空响应"
+                if kind == "tps" and "spark" in command.lower():
+                    result += "；spark 异步命令可能无法通过 RCON 回复，请按 TPS 文档启用附带的 JVM 采集器。"
+                    if file_error:
+                        result += "\n" + file_error
             if any(
                 x in result.casefold()
                 for x in ("unknown command", "unknown or incomplete", "incorrect argument", "未知", "不完整")
@@ -126,6 +142,26 @@ class Service:
         except Exception as exc:
             self.last_status[sid] = "离线或 RCON 不可用"
             return "离线或 RCON 不可用：" + safe_text(str(exc) or type(exc).__name__, 300)
+
+    def format_tps(self, sid: str, result: str) -> str:
+        server = self.settings.servers[sid]
+        metrics = parse_spark_tps(result, self.settings.tps_missing_value)
+        values = {
+            **metrics.values,
+            "server": server.name,
+            "server_id": sid,
+            "tps_command": server.tps_command,
+            "result": metrics.raw,
+            "tps_raw": metrics.raw,
+            "tps_parse_status": metrics.status,
+            "tps_missing_fields": ", ".join(metrics.missing),
+            "tps_warning": "",
+        }
+        if metrics.status == "未解析":
+            return self.settings.render("tps_error", **values)
+        if metrics.missing:
+            values["tps_warning"] = self.settings.render("tps_warning", **values)
+        return self.settings.render("tps", **values)
 
     async def disk_write(self, server, entries):
         task = asyncio.create_task(asyncio.to_thread(write_whitelist, server, entries))
@@ -230,7 +266,9 @@ class Service:
             targets = self.targets(group, args[0] if args else "")
             values = await asyncio.gather(*(self.query(sid, action) for sid in targets))
             return "\n".join(
-                self.settings.render(action, server=self.settings.servers[s].name, result=v)
+                self.format_tps(s, v)
+                if action == "tps"
+                else self.settings.render(action, server=self.settings.servers[s].name, result=v)
                 for s, v in zip(targets, values)
             )
         if action == "restart":

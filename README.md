@@ -2,7 +2,7 @@
 
 这是一个可安装到 AstrBot 的 Java 版 Minecraft 管理插件。群成员通过 `mc` 指令管理自己的白名单；同一个群绑定的多台服务端共用一份白名单，不同群彼此隔离。管理面板直接出现在 AstrBot 的插件详情页中。
 
-支持 Python 3.12+、AstrBot 4.26.3+（小于 5）。v1.0.2 已针对 AstrBot 4.26.3 和 4.28.2 检查公开 API、版本校验及插件导入流程。白名单与 RCON 核心仅使用 Python 标准库。
+支持 Python 3.12+、AstrBot 4.26.3+（小于 5）。v1.0.3 已针对 AstrBot 4.26.3 和 4.28.2 检查公开 API、版本校验及插件导入流程。白名单与 RCON 核心仅使用 Python 标准库。
 
 ## 已实现
 
@@ -33,11 +33,13 @@ MC 服务端共同父目录
 
 ## 安装
 
-1. 使用 `dist/astrbot_plugin_mc_manager-1.0.2.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
+1. 使用 `dist/astrbot_plugin_mc_manager-1.0.3.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
 2. 在各服务端开启 RCON 和白名单，给每台服务端分配独立的 RCON 端口。
 3. 打开插件配置，填写共同父目录、服务器配置、群配置。可参考 [config.example.json](config.example.json)。
 4. 重载插件，在绑定的群内发送 `/mc`，记录本群主动广播的会话。
 5. 打开插件详情 → Minecraft 管理面板，点击“刷新状态”，检查连接与同步状态。
+
+完整默认配置为 [config.default.json](config.default.json)，两群五服示例为 [config.example.json](config.example.json)。
 
 详细部署说明见 [docs/DEPLOY.md](docs/DEPLOY.md)。配置文件中的示例群号、平台 ID、管理员 ID、目录和密码需要替换成实际值。
 
@@ -116,7 +118,7 @@ MC 服务端共同父目录
 
 文字中的普通花括号写成 `{{` 和 `}}`；模板不支持 Python 表达式、属性访问或格式化代码。服务端返回的颜色代码会被去掉。
 
-TPS 的服务端命令在每台服务器的 `tps_command` 中单独设置。Paper/Spigot 常见为 `tps`，装有 spark 的其他核心可按其实际命令配置。插件展示真实控制台输出；没有相应命令会显示不支持，不会生成估算 TPS。
+TPS 默认使用 spark，控制台命令为 `spark tps`。19 个 TPS、Tick 耗时和 CPU 指标都可以通过变量放入 `messages.tps`。完整变量表、默认模板与空响应处理见 [docs/TPS_VARIABLES.md](docs/TPS_VARIABLES.md)。管理页面提供变量表与 TPS 模板编辑器；部分 spark 环境的 RCON 回复为空时，可以启用包内的 [本地采集器](companion/README.md)。
 
 重启成功群广播示例：`🎉 {server} 已恢复，耗时 {seconds} 秒，大家可以上线啦！{detail}`。失败广播示例：`⚠️ {server} 启动失败，请管理员检查：{error}`。
 
@@ -160,6 +162,6 @@ python -m pip install -r requirements-dev.txt
 python tools/build_release.py
 ```
 
-测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。使用 AstrBot 4.26.3 发布包验证的 68 项测试全部通过；AstrBot 4.28.2 的 17 项接口与导入兼容测试也通过，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。v1.0.3 的验证结果包含 spark 解析、本地采集器、文件新鲜度、管理页面与既有权限功能，见验证记录，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 调研依据和适用边界见 [docs/RESEARCH.md](docs/RESEARCH.md)。本工作区没有正在运行的 AstrBot 实例和真实 Minecraft 服务端，因此上线前需要按部署文档完成实际环境联调。

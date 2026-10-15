@@ -1,5 +1,5 @@
 name: astrbot_plugin_mc_manager
-version: v1.0.2
+version: v1.0.3
 author: wutut
 display_name: Minecraft 群服管理
 desc: 按群隔离并同步多台 Java 版 Minecraft 服务端的白名单，支持成员自助管理、玩家与 TPS 查询、管理员重启监控和广播、审计日志以及 AstrBot 管理页面。

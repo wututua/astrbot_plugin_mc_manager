@@ -247,3 +247,15 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIsNone(current.store.db.execute("SELECT * FROM scopes WHERE id='g2'").fetchone())
         self.assertIsNone(current.store.db.execute("SELECT * FROM bindings WHERE server='server2'").fetchone())
+
+    async def test_config_exposes_spark_template_and_documented_variables(self):
+        with self.bound_request():
+            response = await self.plugin.page_config()
+        data = json.loads(response.body)
+        self.assertIn("{tps_5s}", data["tps_default_template"])
+        self.assertIn("{cpu_process_15m}", data["tps_default_template"])
+        metrics = [row for row in data["tps_variables"] if row["category"] == "指标"]
+        self.assertEqual(len(metrics), 19)
+        by_name = {row["name"]: row for row in metrics}
+        self.assertEqual(by_name["mspt_10s_p95"]["unit"], "ms")
+        self.assertEqual(by_name["cpu_process_1m"]["unit"], "%")
