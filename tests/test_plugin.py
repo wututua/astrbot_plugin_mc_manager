@@ -124,6 +124,10 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
                 inner.registered_web_apis = []
 
             def register_web_api(inner, *args):
+                for index, existing in enumerate(inner.registered_web_apis):
+                    if existing[0] == args[0] and existing[2] == args[2]:
+                        inner.registered_web_apis[index] = args
+                        return
                 inner.registered_web_apis.append(args)
 
             async def send_message(inner, origin, chain):
@@ -441,3 +445,131 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(self.plugin.service, current)
         self.assertFalse(current.closed)
         self.assertNotIn("page_size", self.plugin.config)
+
+    async def recovery_plugin(self, raw):
+        await self.plugin.terminate()
+        self.plugin = self.main.MCManagerPlugin(self.context, self.Config(raw))
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            await self.plugin.initialize()
+        self.assertIsNone(self.plugin.service)
+        self.assertTrue(self.plugin.config_error)
+        self.assertEqual(len(self.context.registered_web_apis), 6)
+
+    async def test_incomplete_group_config_loads_repair_ui_without_mutating_original(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"] = [{"id": "new_group", "platform_id": "", "group_id": "", "server_ids": ["server1"]}]
+        original = json.loads(json.dumps(raw))
+        await self.recovery_plugin(raw)
+        self.assertIn("第 1 条", self.plugin.config_error)
+        self.assertIn("platform_id", self.plugin.config_error)
+        self.assertIn("group_id", self.plugin.config_error)
+        self.assertEqual(dict(self.plugin.config), original)
+        self.assertEqual((self.root / "server1/whitelist.json").read_text(encoding="utf-8"), "[]")
+
+    async def test_repair_config_api_keeps_secrets_masked_and_history_available(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["platform_id"] = ""
+        await self.recovery_plugin(raw)
+        with self.bound_request():
+            response = await self.plugin.page_config()
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.body)
+        self.assertIn("platform_id", data["config_error"])
+        self.assertEqual(data["config"]["servers"][0]["rcon_password"], "__KEEP__")
+        self.assertEqual(data["config"]["groups"][0]["platform_id"], "")
+        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100"}])
+        self.assertNotIn("private-secret", response.body.decode())
+        self.assertIn("groups", data["schema"])
+
+    async def test_repair_snapshot_succeeds_but_commands_are_blocked(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = ""
+        await self.recovery_plugin(raw)
+        self.FakeRcon.commands = []
+        with self.bound_request(query="probe=1"):
+            response = await self.plugin.page_snapshot()
+        data = json.loads(response.body)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(data["configuration_required"])
+        self.assertEqual(data["servers"], [])
+        self.assertEqual(self.FakeRcon.commands, [])
+        with self.assertRaisesRegex(self.main.MCError, "配置待修正"):
+            self.plugin._service()
+        with self.bound_request({"group": "g1", "action": "restart", "args": ["server1"]}):
+            response = await self.plugin.page_action()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.FakeRcon.commands, [])
+
+    async def test_corrected_config_activates_service_and_preserves_password(self):
+        corrected = json.loads(json.dumps(dict(self.plugin.config)))
+        raw = json.loads(json.dumps(corrected))
+        raw["groups"][0]["platform_id"] = ""
+        raw["groups"][0]["group_id"] = ""
+        await self.recovery_plugin(raw)
+        old_revision = self.plugin.config_revision
+        corrected["servers"][0]["rcon_password"] = "__KEEP__"
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            with self.bound_request({"config": corrected, "revision": old_revision}):
+                response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(self.plugin.config_error, "")
+        self.assertIsNotNone(self.plugin.service)
+        self.assertEqual(self.plugin.settings.groups["g1"].group_id, "100")
+        self.assertEqual(self.plugin.config["servers"][0]["rcon_password"], "private-secret")
+        self.assertNotEqual(self.plugin.config_revision, old_revision)
+        with self.bound_request():
+            snapshot = json.loads((await self.plugin.page_snapshot()).body)
+        self.assertFalse(snapshot["configuration_required"])
+        self.assertEqual(snapshot["config_error"], "")
+
+    async def test_bad_repair_save_preserves_recovery_state_and_history(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = ""
+        await self.recovery_plugin(raw)
+        error = self.plugin.config_error
+        revision = self.plugin.config_revision
+        with self.bound_request({"config": raw, "revision": revision}):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.plugin.config_error, error)
+        self.assertEqual(self.plugin.config_revision, revision)
+        self.assertIsNone(self.plugin.service)
+        self.assertEqual(self.plugin._config_bindings()["groups"][0]["group_id"], "100")
+
+    async def test_history_conflict_also_enters_repair_mode_without_rebinding(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "200"
+        await self.recovery_plugin(raw)
+        self.assertIn("不能改绑", self.plugin.config_error)
+        self.assertEqual(self.plugin._config_bindings()["groups"][0]["group_id"], "100")
+
+    async def test_malformed_server_structure_can_be_read_and_fixed_in_repair_mode(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"] = {"rcon_password": "private-secret"}
+        await self.recovery_plugin(raw)
+        with self.bound_request():
+            response = await self.plugin.page_config()
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.body)
+        self.assertEqual(data["config"]["servers"]["rcon_password"], "__KEEP__")
+        self.assertNotIn("private-secret", response.body.decode())
+
+    async def test_repair_mode_does_not_skip_dashboard_authentication(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"] = [{"id": "", "platform_id": "", "group_id": ""}]
+        await self.recovery_plugin(raw)
+        with self.bound_request(username=None):
+            response = await self.plugin.page_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("登录", json.loads(response.body)["message"])
+        with self.bound_request(username=None):
+            response = await self.plugin.page_snapshot()
+        self.assertEqual(response.status_code, 400)

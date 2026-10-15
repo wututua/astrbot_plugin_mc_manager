@@ -15,6 +15,7 @@ function el(tag, text, className) {
 
 export function createSettings({ api, work, notice, output, confirmAction, refresh }) {
   let loaded = false;
+  let configError = '';
   let schema = {};
   let draft = {};
   let saved = '';
@@ -63,7 +64,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
   function groupItems() { return schema.groups?.templates?.group?.items || {}; }
   function hasChanges() { return jsonDirty || (loaded && JSON.stringify(draft) !== saved); }
   function syncState() {
-    $('config-state').textContent = hasChanges() ? '有未保存的修改' : '配置已保存';
+    $('config-state').textContent = hasChanges() ? '有未保存的修改' : configError ? '配置待修正' : '配置已保存';
     $('config-state').classList.toggle('unsaved', hasChanges());
     $('save-config').disabled = busy || !loaded;
     $('reload-config').disabled = busy || !loaded;
@@ -219,7 +220,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     wrapper.append(el('legend', '本群服务器（可多选）'));
     const choices = [];
     for (const server of draft.servers) {
-      const selectedGroup = draft.groups.find(g => g.id !== group.id && g.server_ids.includes(server.id));
+      const selectedGroup = draft.groups.find((g, index) => index !== (entity?.kind === 'group' ? entity.index : -1) && g.server_ids.includes(server.id));
       const history = bindings.servers.find(b => b.server === server.id && b.scope !== group.id);
       const locked = selectedGroup || history;
       const label = el('label', undefined, 'server-choice');
@@ -227,7 +228,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       checkbox.checked = group.server_ids.includes(server.id);
       checkbox.disabled = Boolean(locked);
       const name = el('span', `${server.name}（${server.id}）`);
-      if (locked) name.append(el('small', `归属 ${selectedGroup?.id || history.scope}`, 'field-hint'));
+      if (locked) name.append(el('small', `归属 ${selectedGroup ? selectedGroup.id || "未命名群" : history.scope}`, 'field-hint'));
       label.append(checkbox, name); wrapper.append(label); choices.push(checkbox);
     }
     wrapper.append(el('p', '每台服务器只归属一个群；同一群下的 UUID 模式必须一致。', 'field-hint'));
@@ -253,6 +254,10 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     $('entity-title').textContent = `${index < 0 ? '添加' : '编辑'}${kind === 'server' ? '服务器' : '群聊'}`;
     $('entity-intro').textContent = kind === 'server' ? '目录填写相对于共同父目录的文件夹。密码留空可保留已保存的密码。' : '选择消息平台，填写群号和管理员账号，再勾选允许本群操作的服务器。';
     const persisted = kind === 'group' ? bindings.groups.find(g => g.id === row.id) : index >= 0 && JSON.parse(saved).servers.some(s => s.id === row.id);
+    if (kind === 'group' && persisted) {
+      row.platform_id = persisted.platform;
+      row.group_id = persisted.group_id;
+    }
     for (const [key, item] of Object.entries(items)) {
       if (kind === 'group' && key === 'server_ids') {
         const choices = serverChoices(row); fields.set(key, choices); container.append(choices.wrapper); continue;
@@ -397,8 +402,17 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     bindings = response.bindings || { groups: [], servers: [] };
     variables = response.tps_variables || []; defaultTps = response.tps_default_template || '';
     revision = response.revision || '';
-    draft = normalize(response.config);
-    saved = JSON.stringify(draft); jsonDirty = false; loaded = true; editVersion++;
+    configError = response.config_error || '';
+    try {
+      draft = normalize(response.config);
+      saved = JSON.stringify(draft); jsonDirty = false;
+    } catch (error) {
+      draft = normalize({}); saved = JSON.stringify(draft); jsonDirty = true;
+      configError = configError || error.message;
+      $('config-editor').value = JSON.stringify(response.config, null, 2);
+      activeSection = 'advanced';
+    }
+    loaded = true; editVersion++;
     $('data-directory').textContent = '插件数据库与日志：' + response.data_directory;
     render();
   }

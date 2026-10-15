@@ -234,13 +234,28 @@ class Settings:
         self.groups: dict[str, Group] = {}
         assigned: set[str] = set()
         bindings: set[tuple[str, str]] = set()
-        for item in raw.get("groups", []):
-            gid = str(item.get("id", ""))
-            platform = str(item.get("platform_id", "")).strip()
-            group_id = str(item.get("group_id", "")).strip()
+        for group_index, item in enumerate(raw.get("groups", []), start=1):
+            gid = str(item.get("id") or "")
+            platform = str(item.get("platform_id") or "").strip()
+            group_id = str(item.get("group_id") or "").strip()
             servers = tuple(aliases(item.get("server_ids", [])))
-            if not ID.fullmatch(gid) or gid in self.groups or not platform or not group_id:
-                raise MCError("群配置需要唯一 ID、平台实例 ID 和群号。")
+            missing = []
+            if not gid.strip():
+                missing.append("群配置唯一 ID（id）")
+            if not platform:
+                missing.append("平台实例 ID（platform_id，填 /sid 的 Bot ID）")
+            if not group_id:
+                missing.append("群号（group_id）")
+            if missing:
+                raise MCError(
+                    f"第 {group_index} 条群绑定缺少：{'、'.join(missing)}。请编辑该群绑定，或删除未使用的空白项。"
+                )
+            if not ID.fullmatch(gid):
+                raise MCError(
+                    f"第 {group_index} 条群绑定的配置 ID 格式无效，只能使用 1～64 位字母、数字、下划线或横线。"
+                )
+            if gid in self.groups:
+                raise MCError(f"第 {group_index} 条群绑定的配置 ID {gid} 重复，请使用不同 ID 或删除重复项。")
             if (platform, group_id) in bindings:
                 raise MCError("同一平台下的群不能重复绑定。")
             if not servers or len(set(servers)) != len(servers):

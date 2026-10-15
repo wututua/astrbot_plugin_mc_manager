@@ -2,7 +2,7 @@
 
 这是一个可安装到 AstrBot 的 Java 版 Minecraft 管理插件。群成员通过 `mc` 指令管理自己的白名单；同一个群绑定的多台服务端共用一份白名单，不同群彼此隔离。管理面板直接出现在 AstrBot 的插件详情页中。
 
-支持 Python 3.12+、AstrBot **>=4.28.0,<5**。v1.1.0 按 AstrBot 4.28.0、4.28.1、4.28.2 与 4.29.0 的正式发布包检查插件使用的全部框架接口。AstrBot 4.28.0 以下请先升级机器人框架。白名单与 RCON 核心仅使用 Python 标准库。
+支持 Python 3.12+、AstrBot **>=4.28.0,<5**。v1.1.1 按 AstrBot 4.28.0、4.28.1、4.28.2 与 4.29.0 的正式发布包检查插件使用的全部框架接口。AstrBot 4.28.0 以下请先升级机器人框架。白名单与 RCON 核心仅使用 Python 标准库。
 
 ## 已实现
 
@@ -31,9 +31,13 @@ MC 服务端共同父目录
 
 群 1 添加 Steve，只同步到 server1、server2、server3。群 2 的成员不能查询或重启群 1 的服务器。一个服务器只能归属一个群；绑定多台服务器的群内共用同一套条目和固定编号。
 
+## 配置不完整时
+
+如果群绑定缺少 id、platform_id 或 group_id，v1.1.1 会保留管理页面并显示具体错误，服务器管理暂时停用。打开“配置与菜单 → 服务器与群聊”，修正对应群绑定或移除空白项，再点击“保存并生效”，服务会立即启用。平台实例 ID 填群内 /sid 回复中的 Bot ID。
+
 ## 安装
 
-1. 使用 `dist/astrbot_plugin_mc_manager-1.1.0.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
+1. 使用 `dist/astrbot_plugin_mc_manager-1.1.1.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
 2. 在各服务端开启 RCON 和白名单，给每台服务端分配独立的 RCON 端口。
 3. 打开插件的 **Minecraft 管理面板 → 配置与菜单 → 服务器与群聊**，在表单中填写共同父目录、添加服务器与群绑定，最后点击“保存并生效”。也可以使用 AstrBot 原生配置页。
 4. 重载插件，在绑定的群内发送 `/mc`，记录本群主动广播的会话。
@@ -162,7 +166,7 @@ python -m pip install -r requirements-dev.txt
 python tools/build_release.py
 ```
 
-测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。v1.1.0 的验证包含框架公开接口、异步配置保存、初始化与卸载、群消息、主动广播、网页 SDK、服务器/群表单、spark 与既有权限功能，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。v1.1.1 的验证包含框架公开接口、异步配置保存、初始化与卸载、群消息、主动广播、网页 SDK、服务器/群表单、spark 与既有权限功能，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 调研依据和适用边界见 [docs/RESEARCH.md](docs/RESEARCH.md)。本工作区没有正在运行的 AstrBot 实例和真实 Minecraft 服务端，因此上线前需要按部署文档完成实际环境联调。
 

@@ -14,6 +14,7 @@ from astrbot.api.web import error_response, json_response, request
 from .mc_manager.config import Actor, MCError, Settings, positive
 from .mc_manager.service import Service
 from .mc_manager.spark import DEFAULT_TPS_TEMPLATE, variables_table
+from .mc_manager.store import Store
 
 PLUGIN_NAME = "astrbot_plugin_mc_manager"
 
@@ -29,13 +30,26 @@ class MCManagerPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context, config)
         self.config = config
-        self.settings = Settings(dict(config))
+        self.config_error = ""
+        try:
+            self.settings = Settings(dict(config))
+        except MCError as exc:
+            self.config_error = str(exc)
+            self.settings = self._recovery_settings()
         self.service: Service | None = None
         self.guard = asyncio.Lock()
         self.config_revision = secrets.token_urlsafe(18)
         self.config_schema = json.loads((Path(__file__).parent / "_conf_schema.json").read_text(encoding="utf-8"))
         self.data_dir = StarTools.get_data_dir(PLUGIN_NAME)
         MCCommandFilter.settings = self.settings
+
+    def _recovery_settings(self) -> Settings:
+        commands = self.config.get("commands", {})
+        prefix = commands.get("prefix", "mc") if isinstance(commands, dict) else "mc"
+        try:
+            return Settings({"commands": {"prefix": prefix}})
+        except MCError:
+            return Settings({})
 
     def _register_web_apis(self):
         for route, handler, methods, desc in [
@@ -50,11 +64,24 @@ class MCManagerPlugin(Star):
 
     async def initialize(self):
         async with self.guard:
-            if self.service is None:
-                self.service = Service(self.settings, self.data_dir, self._send)
-                await self.service.start()
-                self._register_web_apis()
-        self.logger.info("MC 管理插件已加载；群与服务器配置在插件配置页或管理面板中填写。")
+            # Configuration repair must stay reachable even when a partially
+            # filled native template fails validation.
+            self._register_web_apis()
+            if self.service is None and not self.config_error:
+                try:
+                    self.service = Service(self.settings, self.data_dir, self._send)
+                    await self.service.start()
+                except MCError as exc:
+                    if self.service is not None:
+                        await self.service.close()
+                        self.service = None
+                    self.config_error = str(exc)
+                    self.settings = self._recovery_settings()
+                    MCCommandFilter.settings = self.settings
+        if self.config_error:
+            self.logger.warning("MC 配置待修正，管理页面可用于修复：%s", self.config_error)
+        else:
+            self.logger.info("MC 管理插件已加载；群与服务器配置在插件配置页或管理面板中填写。")
 
     async def _send(self, origin: str, text: str) -> bool:
         try:
@@ -65,6 +92,8 @@ class MCManagerPlugin(Star):
             return False
 
     def _service(self) -> Service:
+        if self.config_error:
+            raise MCError("配置待修正：" + self.config_error + " 请打开管理面板修正后保存。")
         if self.service is None or self.service.closed:
             raise MCError("插件尚未初始化或已卸载。")
         return self.service
@@ -110,10 +139,21 @@ class MCManagerPlugin(Star):
         try:
             self._page_admin()
             async with self.guard:
+                if self.config_error:
+                    return json_response(
+                        {
+                            "groups": [],
+                            "servers": [],
+                            "jobs": [],
+                            "notifications_pending": 0,
+                            "config_error": self.config_error,
+                            "configuration_required": True,
+                        }
+                    )
                 service = self._service()
                 if request.query.get("probe", "") == "1":
                     await asyncio.gather(*(service.query(s, "status") for s in self.settings.servers))
-                return json_response(service.snapshot())
+                return json_response({**service.snapshot(), "config_error": "", "configuration_required": False})
         except MCError as exc:
             return error_response(str(exc))
 
@@ -181,13 +221,33 @@ class MCManagerPlugin(Star):
             )
         return options
 
+    def _config_bindings(self) -> dict:
+        store = self.service.store if self.service is not None else Store(self.data_dir)
+        try:
+            return {
+                "groups": [dict(row) for row in store.db.execute("SELECT id,platform,group_id FROM scopes")],
+                "servers": [dict(row) for row in store.db.execute("SELECT server,scope FROM bindings")],
+            }
+        finally:
+            if self.service is None:
+                store.close()
+
+    @staticmethod
+    def _redact_passwords(value):
+        if isinstance(value, dict):
+            return {
+                key: ("__KEEP__" if item else "") if key == "rcon_password" else MCManagerPlugin._redact_passwords(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [MCManagerPlugin._redact_passwords(item) for item in value]
+        return value
+
     async def page_config(self):
         try:
             self._page_admin()
             async with self.guard:
-                payload = copy.deepcopy(dict(self.config))
-                for server in payload.get("servers", []):
-                    server["rcon_password"] = "__KEEP__" if server.get("rcon_password") else ""
+                payload = self._redact_passwords(copy.deepcopy(dict(self.config)))
                 return json_response(
                     {
                         "config": payload,
@@ -197,16 +257,8 @@ class MCManagerPlugin(Star):
                         "schema": self.config_schema,
                         "platforms": self._platform_options(),
                         "revision": self.config_revision,
-                        "bindings": {
-                            "groups": [
-                                dict(row)
-                                for row in self._service().store.db.execute("SELECT id,platform,group_id FROM scopes")
-                            ],
-                            "servers": [
-                                dict(row)
-                                for row in self._service().store.db.execute("SELECT server,scope FROM bindings")
-                            ],
-                        },
+                        "bindings": self._config_bindings(),
+                        "config_error": self.config_error,
                     }
                 )
         except MCError as exc:
@@ -231,13 +283,18 @@ class MCManagerPlugin(Star):
                 raise MCError("请求需要 config 对象。")
             raw = payload["config"]
             async with self.guard:
-                current = self._service()
+                current = self.service
                 if "revision" in payload and payload["revision"] != self.config_revision:
                     raise MCError("配置已被其他页面修改，请先重新载入配置后再保存。")
-                if current.restart_tasks:
+                if current is not None and current.restart_tasks:
                     raise MCError("有服务器正在重启，等待重启监控结束后再保存配置。")
                 Settings(raw)
-                old_servers = {s["id"]: s for s in self.config.get("servers", [])}
+                previous_servers = self.config.get("servers", [])
+                old_servers = (
+                    {str(item["id"]): item for item in previous_servers if isinstance(item, dict) and "id" in item}
+                    if isinstance(previous_servers, list)
+                    else {}
+                )
                 for server in raw.get("servers", []):
                     if server.get("rcon_password") == "__KEEP__":
                         sid = server.get("id")
@@ -261,8 +318,10 @@ class MCManagerPlugin(Star):
                     except Exception:
                         self.logger.exception("MC 配置回滚保存失败，当前实例仍使用原配置")
                     raise
-                await current.close()
+                if current is not None:
+                    await current.close()
                 self.settings = settings
+                self.config_error = ""
                 MCCommandFilter.settings = settings
                 self.service = candidate
                 self.config_revision = secrets.token_urlsafe(18)

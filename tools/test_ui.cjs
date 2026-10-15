@@ -42,15 +42,31 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
       config = clone(defaults); revision = 'revision-1'; window.latestConfig = clone(config);
       bindings.groups = []; bindings.servers = []; window.noPlatforms = true;
     };
+    let configError = '';
+    const recoveryState = JSON.parse(sessionStorage.getItem('mc-test-recovery') || 'null');
+    if (recoveryState) {
+      config = clone(recoveryState.config);
+      bindings.groups = clone(recoveryState.bindings.groups); bindings.servers = clone(recoveryState.bindings.servers);
+      configError = recoveryState.error; window.latestConfig = clone(config);
+    }
+    window.prepareRecovery = (keepHistory = false) => {
+      const broken = clone(config);
+      broken.groups[0].platform_id = ''; broken.groups[0].group_id = '';
+      if (!keepHistory) broken.groups[0].id = '';
+      sessionStorage.setItem('mc-test-recovery', JSON.stringify({ config: broken,
+        bindings: keepHistory ? clone(bindings) : { groups: [], servers: [] },
+        error: '第 1 条群绑定缺少：平台实例 ID（platform_id，填 /sid 的 Bot ID）、群号（group_id）。请编辑该群绑定，或删除未使用的空白项。' }));
+    };
     const backend = {
       ready: async () => ({ plugin_name: 'astrbot_plugin_mc_manager' }),
       apiGet: async (endpoint, params) => {
         window.apiCalls.push({ endpoint, params });
+        if (endpoint === 'snapshot' && configError) return { groups: [], servers: [], jobs: [], notifications_pending: 0, config_error: configError, configuration_required: true };
         if (endpoint === 'snapshot') return { groups: config.groups.map(g => ({ ...clone(g), entries: g.id === 'group1' ? 2 : 0, broadcast_ready: g.id === 'group1' })),
           servers: config.servers.map((s, i) => ({ ...clone(s), directory: 'D:/Minecraft/' + s.directory, status: i === 2 ? '离线或 RCON 不可用' : '在线', pending: i === 2 ? 'RCON 不可用，等待自动同步' : '' })), jobs: [], notifications_pending: 0 };
         if (endpoint === 'entries') return { entries: params.group === 'group1' ? clone(entries) : [] };
         if (endpoint === 'logs') return { logs: [{ time: '2026-10-13T14:30:00+00:00', action: 'add', group_id: '111111111', user: '123456789', user_name: '群成员', player: 'Steve', detail: '添加 #1；同步 server1,server2,server3' }], page: 1, total: 1 };
-        if (endpoint === 'config') return { config: clone(config), schema, platforms: window.noPlatforms ? [] : [{ id: 'qq-bot', name: 'aiocqhttp', display_name: 'QQ / OneBot' }], bindings: clone(bindings), revision,
+        if (endpoint === 'config') return { config: clone(config), config_error: configError, schema, platforms: window.noPlatforms ? [] : [{ id: 'qq-bot', name: 'aiocqhttp', display_name: 'QQ / OneBot' }], bindings: clone(bindings), revision,
           data_directory: 'data/plugin_data/astrbot_plugin_mc_manager', tps_default_template: defaults.messages.tps, tps_variables: tpsVariables };
       },
       apiPost: async (endpoint, body) => {
@@ -58,7 +74,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
         if (endpoint === 'config') {
           if (window.mockConflict) return { status: 'error', message: '配置已被其他页面修改，请先重新载入配置后再保存。' };
           if (body.revision !== revision) throw new Error('配置版本冲突');
-          config = clone(body.config);
+          config = clone(body.config); configError = ''; sessionStorage.removeItem('mc-test-recovery');
           for (const server of config.servers) if (server.rcon_password) server.rcon_password = '__KEEP__';
           for (const group of config.groups) {
             if (!bindings.groups.some(g => g.id === group.id)) bindings.groups.push({ id: group.id, platform: group.platform_id, group_id: group.group_id });
@@ -277,6 +293,34 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
     assert.equal(await page.evaluate(() => window.latestConfig.groups[0].group_id), '999999999');
     assert.deepEqual(await page.evaluate(() => window.latestConfig.groups[0].server_ids), ['server1']);
     assert.equal(await page.locator('#configured-groups article').count(), 1);
+    // A broken native template must still open the authenticated repair form.
+    await page.evaluate(() => window.prepareRecovery(false));
+    await page.reload();
+    await page.waitForFunction(() => !document.getElementById('settings').hidden && document.getElementById('config-state').textContent === '配置待修正');
+    assert.match(await page.locator('#configuration-error').textContent(), /platform_id.*group_id/);
+    assert.equal(await page.locator('#server-count').textContent(), '0');
+    await page.locator('#configured-groups button').filter({ hasText: '编辑群聊' }).click();
+    assert.equal(await page.locator('#entity-id').isEditable(), true);
+    await page.locator('#entity-id').fill('fixed_group');
+    await page.locator('#entity-platform_id').selectOption('qq-bot');
+    await page.locator('#entity-group_id').fill('999999999');
+    await page.locator('#entity-fields input[value="server1"]').check();
+    await page.locator('#entity-apply').click();
+    await save();
+    assert.equal(await page.locator('#configuration-error').isHidden(), true);
+    assert.equal(await page.locator('#config-state').textContent(), '配置已保存');
+    assert.equal(await page.evaluate(() => window.latestConfig.groups[0].id), 'fixed_group');
+    // A missing persisted identity restores values from its own historical
+    // binding and cannot be changed to another group's identity.
+    await page.evaluate(() => window.prepareRecovery(true));
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('config-state').textContent === '配置待修正');
+    await page.locator('#configured-groups button').filter({ hasText: '编辑群聊' }).click();
+    assert.equal(await page.locator('#entity-platform_id').getAttribute('readonly'), '');
+    assert.equal(await page.locator('#entity-platform_id').inputValue(), 'qq-bot');
+    assert.equal(await page.locator('#entity-group_id').inputValue(), '999999999');
+    await page.locator('#entity-apply').click(); await save();
+    assert.equal(await page.locator('#configuration-error').isHidden(), true);
     assert.deepEqual(errors, []);
     console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): server/group forms, historical isolation, passwords, admins, common settings, commands/menu/broadcasts, spark templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

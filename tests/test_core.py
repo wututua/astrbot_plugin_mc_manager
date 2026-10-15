@@ -427,6 +427,19 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(MCError, "布尔"):
             Settings(raw)
 
+    def test_incomplete_group_reports_exact_item_and_fields(self):
+        raw = self.base()
+        raw["groups"][0]["platform_id"] = ""
+        raw["groups"][0]["group_id"] = None
+        with self.assertRaisesRegex(MCError, "第 1 条.*platform_id.*group_id"):
+            Settings(raw)
+
+    def test_duplicate_group_id_reports_item_number(self):
+        raw = self.base()
+        raw["groups"].append({"id": "g1", "platform_id": "bot", "group_id": "2", "server_ids": ["s1"]})
+        with self.assertRaisesRegex(MCError, "第 2 条.*重复"):
+            Settings(raw)
+
     def test_empty_install_configuration(self):
         self.assertEqual(Settings({}).groups, {})
 

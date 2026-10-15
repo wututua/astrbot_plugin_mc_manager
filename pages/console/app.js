@@ -93,6 +93,8 @@ function renderServers() {
 }
 async function loadSnapshot(probe) {
   snapshot = await api('apiGet', 'snapshot', { probe: probe ? '1' : '0' });
+  $('configuration-error').hidden = !snapshot.config_error;
+  $('configuration-error').textContent = snapshot.config_error ? '配置待修正：' + snapshot.config_error : '';
   $('server-count').textContent = snapshot.servers.length;
   $('group-count').textContent = snapshot.groups.length;
   $('pending-count').textContent = snapshot.servers.filter(s => s.pending).length;
@@ -155,15 +157,18 @@ async function loadCurrentTab() {
   if (currentTab === 'audit') await loadLogs();
   if (currentTab === 'settings') await settings.load();
 }
+async function selectTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('[data-tab]').forEach(button => {
+    const active = button.dataset.tab === tab;
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+  for (const id of ['overview', 'whitelist', 'audit', 'settings']) $(id).hidden = id !== tab;
+  await loadCurrentTab();
+}
 for (const button of document.querySelectorAll('[data-tab]')) {
   button.addEventListener('click', () => work(async () => {
-    currentTab = button.dataset.tab;
-    document.querySelectorAll('[data-tab]').forEach(b => {
-      const active = b.dataset.tab === currentTab;
-      b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active));
-    });
-    for (const id of ['overview', 'whitelist', 'audit', 'settings']) $(id).hidden = id !== currentTab;
-    await loadCurrentTab();
+    await selectTab(button.dataset.tab);
   }));
 }
 $('refresh').addEventListener('click', () => work(async () => { await loadSnapshot(true); await loadCurrentTab(); notice('状态已刷新。'); }));
@@ -182,7 +187,10 @@ await work(async () => {
   if (!bridge) throw new Error('请从 AstrBot 的插件详情页打开管理面板。');
   await bridge.ready();
   await loadSnapshot(false);
-  notice('已连接 AstrBot。配置后可点击「刷新状态」检查 RCON。');
+  if (snapshot.config_error) {
+    await selectTab('settings');
+    notice('插件已加载，请在下方修正群或服务器配置后保存。', true);
+  } else notice('已连接 AstrBot。配置后可点击「刷新状态」检查 RCON。');
 });
 
 setInterval(() => {
