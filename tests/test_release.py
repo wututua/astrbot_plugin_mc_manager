@@ -6,6 +6,7 @@ import copy
 import logging
 import os
 import posixpath
+import re
 import shutil
 import tempfile
 import types
@@ -54,6 +55,8 @@ def official_archive_inspector(allowed_root: Path):
 
     namespace = {
         "os": os,
+        "re": re,
+        "copy": copy.copy,
         "zipfile": __import__("zipfile"),
         "yaml": yaml,
         "Path": Path,
@@ -121,7 +124,7 @@ def official_version_checker():
         "InvalidSpecifier": InvalidSpecifier,
         "Version": Version,
         "InvalidVersion": InvalidVersion,
-        "VERSION": "4.26.3",
+        "VERSION": "4.28.0",
     }
     exec(compile(module, str(source), "exec"), namespace)
     return namespace["_validate_astrbot_version_specifier"]
@@ -153,6 +156,7 @@ def discover_official_pages(plugin_root: Path):
         "Path": Path,
         "StarMetadata": types.SimpleNamespace,
         "PLUGIN_PAGE_ROOT_DIR_NAME": "pages",
+        "PLUGIN_PAGE_ROOT_DIR_NAMES": ("views", "pages"),
         "PLUGIN_PAGE_ENTRY_FILE_NAME": "index.html",
         "aio_ospath": types.SimpleNamespace(isdir=isdir, isfile=isfile),
     }
@@ -201,20 +205,28 @@ class ReleaseTests(unittest.TestCase):
     def test_release_zip_contains_install_files_and_consistent_version(self):
         with tempfile.TemporaryDirectory() as temp:
             path = build(Path(temp))
-            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.0.4.zip")
+            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.1.0.zip")
             with ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 metadata = validate_metadata(yaml.safe_load(archive.read("astrbot_plugin_mc_manager/metadata.yaml")))
-                self.assertEqual(metadata["version"], "v1.0.4")
+                self.assertEqual(metadata["version"], "v1.1.0")
                 for name in (
                     "main.py",
                     "_conf_schema.json",
                     "mc_manager/service.py",
                     "pages/console/index.html",
                     "pages/console/settings.js",
+                    "views/console/index.html",
+                    "views/console/app.js",
+                    "views/console/settings.js",
                 ):
                     self.assertIn("astrbot_plugin_mc_manager/" + name, archive.namelist())
                 self.assertFalse(any("sqlite" in name or ".research" in name for name in archive.namelist()))
+                for filename in ("index.html", "app.js", "settings.js", "style.css"):
+                    self.assertEqual(
+                        archive.read("astrbot_plugin_mc_manager/pages/console/" + filename),
+                        archive.read("astrbot_plugin_mc_manager/views/console/" + filename),
+                    )
 
     @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
     def test_official_inspector_reproduces_missing_desc_error(self):
@@ -238,7 +250,7 @@ class ReleaseTests(unittest.TestCase):
             inspector = official_archive_inspector(directory)
             inspected = inspector.inspect_plugin_archive(str(path))
             self.assertEqual(inspected["metadata"]["name"], "astrbot_plugin_mc_manager")
-            self.assertEqual(inspected["metadata"]["version"], "v1.0.4")
+            self.assertEqual(inspected["metadata"]["version"], "v1.1.0")
             destination = directory / "installed"
             getattr(inspector(), EXTRACT_METHOD)(str(path), str(destination))
             for name in ("main.py", "metadata.yaml", "_conf_schema.json", "pages/console/index.html"):
@@ -249,9 +261,9 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual([page.name for page in pages], ["console"])
 
     @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
-    def test_official_version_gate_accepts_4263_and_4282(self):
+    def test_official_version_gate_accepts_supported_428_and_429_releases(self):
         checker = official_version_checker()
-        for version in ("4.26.3", "4.28.2"):
+        for version in ("4.28.0", "4.28.1", "4.28.2", "4.29.0"):
             with self.subTest(version=version):
                 checker.__globals__["VERSION"] = version
                 self.assertEqual(checker(self.metadata()["astrbot_version"]), (True, None))
@@ -259,9 +271,11 @@ class ReleaseTests(unittest.TestCase):
         self.assertFalse(checker(self.metadata()["astrbot_version"])[0])
 
     @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
-    def test_official_version_gate_reproduces_previous_rejection(self):
+    def test_official_version_gate_rejects_pre_428_releases(self):
         checker = official_version_checker()
-        checker.__globals__["VERSION"] = "4.26.3"
-        valid, error = checker(">=4.28.2,<5")
-        self.assertFalse(valid)
-        self.assertEqual(error, "AstrBot 4.26.3 does not satisfy plugin astrbot_version: >=4.28.2,<5")
+        for version in ("4.26.3", "4.27.3"):
+            with self.subTest(version=version):
+                checker.__globals__["VERSION"] = version
+                valid, error = checker(self.metadata()["astrbot_version"])
+                self.assertFalse(valid)
+                self.assertEqual(error, f"AstrBot {version} does not satisfy plugin astrbot_version: >=4.28.0,<5")

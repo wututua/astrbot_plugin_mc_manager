@@ -2,7 +2,7 @@
 
 这是一个可安装到 AstrBot 的 Java 版 Minecraft 管理插件。群成员通过 `mc` 指令管理自己的白名单；同一个群绑定的多台服务端共用一份白名单，不同群彼此隔离。管理面板直接出现在 AstrBot 的插件详情页中。
 
-支持 Python 3.12+、AstrBot 4.26.3+（小于 5）。v1.0.4 已针对 AstrBot 4.26.3 和 4.28.2 检查公开 API、版本校验及插件导入流程。白名单与 RCON 核心仅使用 Python 标准库。
+支持 Python 3.12+、AstrBot **>=4.28.0,<5**。v1.1.0 按 AstrBot 4.28.0、4.28.1、4.28.2 与 4.29.0 的正式发布包检查插件使用的全部框架接口。AstrBot 4.28.0 以下请先升级机器人框架。白名单与 RCON 核心仅使用 Python 标准库。
 
 ## 已实现
 
@@ -33,7 +33,7 @@ MC 服务端共同父目录
 
 ## 安装
 
-1. 使用 `dist/astrbot_plugin_mc_manager-1.0.4.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
+1. 使用 `dist/astrbot_plugin_mc_manager-1.1.0.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
 2. 在各服务端开启 RCON 和白名单，给每台服务端分配独立的 RCON 端口。
 3. 打开插件的 **Minecraft 管理面板 → 配置与菜单 → 服务器与群聊**，在表单中填写共同父目录、添加服务器与群绑定，最后点击“保存并生效”。也可以使用 AstrBot 原生配置页。
 4. 重载插件，在绑定的群内发送 `/mc`，记录本群主动广播的会话。
@@ -124,7 +124,7 @@ TPS 默认使用 spark，控制台命令为 `spark tps`。19 个 TPS、Tick 耗�
 
 ## 管理页面
 
-入口是 AstrBot 插件详情页中的 **Minecraft 管理面板**。`pages/console/index.html` 由 AstrBot 加载，页面通过官方 bridge 调用插件 API；没有另开端口或另建登录系统。
+入口是 AstrBot 插件详情页中的 **Minecraft 管理面板**。安装包同时提供内容一致的 `pages/console/index.html` 和 `views/console/index.html`，由对应版本的 AstrBot 加载，页面通过相应正式版本的官方 bridge 调用插件 API，使用 AstrBot 后台鉴权。新版优先使用 AstrBotPluginView，4.28 系列使用 AstrBotPluginPage。
 
 页面支持按群切换、玩家/TPS 查询、白名单添加/修改/移除、同步重试、导入、重启以及操作日志筛选。配置使用可视化表单：添加服务器、添加群聊、勾选服务器、管理员账号、常规设置、指令别名、菜单、回复与广播、spark TPS 都可直接修改；高级 JSON 保留为批量编辑入口。保存后立即生效，密码留空可以保留原密码，草稿状态和多页面版本检查避免误覆盖。详细操作见 [docs/WEB_PANEL.md](docs/WEB_PANEL.md)。
 
@@ -162,6 +162,8 @@ python -m pip install -r requirements-dev.txt
 python tools/build_release.py
 ```
 
-测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。v1.0.4 的验证包含可视化服务器/群表单、首次空配置、密码保留与清除、草稿、多页面冲突、spark 与既有权限功能，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。v1.1.0 的验证包含框架公开接口、异步配置保存、初始化与卸载、群消息、主动广播、网页 SDK、服务器/群表单、spark 与既有权限功能，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 调研依据和适用边界见 [docs/RESEARCH.md](docs/RESEARCH.md)。本工作区没有正在运行的 AstrBot 实例和真实 Minecraft 服务端，因此上线前需要按部署文档完成实际环境联调。
+
+升级接口的具体范围、版本矩阵和保留数据说明见 [docs/ASTRBOT_COMPATIBILITY.md](docs/ASTRBOT_COMPATIBILITY.md)。

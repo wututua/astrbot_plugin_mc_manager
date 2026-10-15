@@ -6,9 +6,8 @@ import json
 import secrets
 from pathlib import Path
 
-from astrbot.api import AstrBotConfig, logger
+from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.api.web import error_response, json_response, request
 
@@ -28,7 +27,7 @@ class MCCommandFilter(filter.CustomFilter):
 
 class MCManagerPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
-        super().__init__(context)
+        super().__init__(context, config)
         self.config = config
         self.settings = Settings(dict(config))
         self.service: Service | None = None
@@ -37,6 +36,8 @@ class MCManagerPlugin(Star):
         self.config_schema = json.loads((Path(__file__).parent / "_conf_schema.json").read_text(encoding="utf-8"))
         self.data_dir = StarTools.get_data_dir(PLUGIN_NAME)
         MCCommandFilter.settings = self.settings
+
+    def _register_web_apis(self):
         for route, handler, methods, desc in [
             ("snapshot", self.page_snapshot, ["GET"], "服务器与群绑定状态"),
             ("entries", self.page_entries, ["GET"], "白名单列表"),
@@ -45,21 +46,22 @@ class MCManagerPlugin(Star):
             ("config", self.page_config, ["GET"], "读取配置（密码脱敏）"),
             ("config", self.page_save_config, ["POST"], "保存配置"),
         ]:
-            context.register_web_api(f"/{PLUGIN_NAME}/{route}", handler, methods, desc)
+            self.context.register_web_api(f"/{PLUGIN_NAME}/{route}", handler, methods, desc)
 
     async def initialize(self):
         async with self.guard:
             if self.service is None:
                 self.service = Service(self.settings, self.data_dir, self._send)
                 await self.service.start()
-        logger.info("MC 管理插件已加载；群与服务器配置在插件配置页或管理面板中填写。")
+                self._register_web_apis()
+        self.logger.info("MC 管理插件已加载；群与服务器配置在插件配置页或管理面板中填写。")
 
     async def _send(self, origin: str, text: str) -> bool:
         try:
-            chain = MessageChain([Plain(text)])
+            chain = MessageChain().message(text)
             return bool(await self.context.send_message(origin, chain))
         except Exception:
-            logger.exception("MC 重启广播发送失败，将在后续同步周期重试")
+            self.logger.exception("MC 重启广播发送失败，将在后续同步周期重试")
             return False
 
     def _service(self) -> Service:
@@ -88,7 +90,7 @@ class MCManagerPlugin(Star):
         except MCError as exc:
             result = self.settings.render("error", error=exc)
         except Exception:
-            logger.exception("MC 指令处理失败")
+            self.logger.exception("MC 指令处理失败")
             result = self.settings.render("error", error="内部错误，请管理员检查 AstrBot 日志和同步状态。")
         yield event.plain_result(result)
 
@@ -161,12 +163,12 @@ class MCManagerPlugin(Star):
         except MCError as exc:
             return error_response(str(exc))
         except Exception:
-            logger.exception("MC 面板操作失败")
+            self.logger.exception("MC 面板操作失败")
             return error_response("操作失败，请查看 AstrBot 日志和服务器状态。")
 
     def _platform_options(self) -> list[dict[str, str]]:
         manager = getattr(self.context, "platform_manager", None)
-        platforms = getattr(manager, "platform_insts", [])
+        platforms = manager.get_insts() if manager is not None else []
         options = []
         for platform in platforms:
             meta = platform.meta()
@@ -210,6 +212,17 @@ class MCManagerPlugin(Star):
         except MCError as exc:
             return error_response(str(exc))
 
+    async def _persist_config(self):
+        task = asyncio.create_task(self.config.save_config_async())
+        try:
+            committed = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Finish the framework's disk write before rollback or unloading.
+            await task
+            raise
+        if committed is False:
+            raise MCError("配置保存被更新的配置覆盖，请重新载入后再试。")
+
     async def page_save_config(self):
         try:
             self._page_admin()
@@ -237,16 +250,16 @@ class MCManagerPlugin(Star):
                 try:
                     self.config.clear()
                     self.config.update(raw)
-                    self.config.save_config()
+                    await self._persist_config()
                     candidate.store.validate_scopes(settings)
-                except Exception:
+                except BaseException:
                     self.config.clear()
                     self.config.update(old_config)
                     candidate.store.close()
                     try:
-                        self.config.save_config()
+                        await self._persist_config()
                     except Exception:
-                        logger.exception("MC 配置回滚保存失败，当前实例仍使用原配置")
+                        self.logger.exception("MC 配置回滚保存失败，当前实例仍使用原配置")
                     raise
                 await current.close()
                 self.settings = settings
@@ -258,7 +271,7 @@ class MCManagerPlugin(Star):
         except (MCError, TypeError, ValueError, KeyError) as exc:
             return error_response(str(exc))
         except Exception:
-            logger.exception("MC 配置保存失败")
+            self.logger.exception("MC 配置保存失败")
             return error_response("配置保存失败，请查看 AstrBot 日志。")
 
     async def terminate(self):

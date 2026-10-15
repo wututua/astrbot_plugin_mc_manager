@@ -1,5 +1,7 @@
 # 部署与首次联调
 
+v1.1.0 要求 AstrBot >=4.28.0,<5 与 Python 3.12+。先升级 AstrBot，再导入插件安装包。插件名称和数据目录保持不变，可保留服务器绑定、白名单归属和审计日志。
+
 ## 1. 服务器目录
 
 插件需要直接读写 Minecraft 服务端目录，AstrBot 必须在同一台机器上运行，或通过文件挂载获得相同目录的可写访问。这里只接入本地文件与 RCON，没有额外的远程代理程序。
@@ -48,7 +50,7 @@ $env:MC_RCON_2 = '你的 server2 RCON 密码'
 
 ## 3. 安装与填写配置
 
-安装 `astrbot_plugin_mc_manager-1.0.4.zip` 后，打开 **Minecraft 管理面板 → 配置与菜单 → 服务器与群聊**，在表单中填写共同父目录并添加服务器和群聊。详见 [WEB_PANEL.md](WEB_PANEL.md)。也可以在 AstrBot 原生插件配置页填写，或在高级 JSON 中应用根目录的 `config.example.json` 示例。
+安装 `astrbot_plugin_mc_manager-1.1.0.zip` 后，打开 **Minecraft 管理面板 → 配置与菜单 → 服务器与群聊**，在表单中填写共同父目录并添加服务器和群聊。详见 [WEB_PANEL.md](WEB_PANEL.md)。也可以在 AstrBot 原生插件配置页填写，或在高级 JSON 中应用根目录的 `config.example.json` 示例。
 
 群配置示例：
 
@@ -128,7 +130,7 @@ done
 | 管理员不能重启 | AstrBot 全局管理员是否正确，或该群 `admin_ids` 是否包含用户 ID |
 | 面板重启提示没有会话 | 在对应群发送一次 `/mc`；或填写实际的 `broadcast_origin` |
 | 重启成功但没有广播 | 群会话是否有效；查看待发送广播数与 AstrBot 日志 |
-| 面板入口未出现 | AstrBot 版本、插件启用状态、`pages/console/index.html` 是否随包安装 |
+| 面板入口未出现 | AstrBot 版本、插件启用状态、`pages/console/index.html`（4.28）或 `views/console/index.html`（4.29）是否随包安装 |
 | 旧群 ID 改绑被拒绝 | 旧 ID 绑定着历史数据，新增群需使用新 ID；不要删除数据库规避归属保护 |
 
 ## 7. 备份与恢复

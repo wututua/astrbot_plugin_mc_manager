@@ -6,23 +6,28 @@ const root = path.resolve(__dirname, '..');
 const schema = JSON.parse(fs.readFileSync(path.join(root, '_conf_schema.json'), 'utf8'));
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'config.default.json'), 'utf8'));
 const tpsVariables = JSON.parse(fs.readFileSync(path.join(root, 'tps.variables.json'), 'utf8')).variables;
+const officialSdkRoot = process.env.MC_TEST_ASTRBOT_RELEASE;
+const officialSdk = officialSdkRoot ? fs.readFileSync(path.join(officialSdkRoot, 'dashboard/plugin_page_bridge.js'), 'utf8') : '';
 const { chromium } = require(path.join(root, '.research/browser/node_modules/playwright'));
 const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env.LOCALAPPDATA, 'ms-playwright/chromium-1243/chrome-win64/chrome.exe');
 
 (async () => {
   const server = http.createServer((req, res) => {
     const pathname = decodeURIComponent(req.url.split('?')[0]);
+    if (pathname === '/bridge-sdk.js' && officialSdk) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' }); res.end(officialSdk); return; }
     const target = path.resolve(root, 'pages/console', pathname === '/' ? 'index.html' : '.' + pathname);
     if (!target.startsWith(path.resolve(root, 'pages/console') + path.sep) || !fs.existsSync(target)) { res.writeHead(404); res.end(); return; }
     const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
     res.writeHead(200, { 'Content-Type': types[path.extname(target)] || 'application/octet-stream' });
-    res.end(fs.readFileSync(target));
+    let content = fs.readFileSync(target);
+    if (officialSdk && path.extname(target) === '.html') content = content.toString('utf8').replace('<script type="module" src="./app.js">', '<script src="/bridge-sdk.js"></script><script type="module" src="./app.js">');
+    res.end(content);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ headless: true, executablePath: chromiumExecutable });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(({ schema, defaults, tpsVariables }) => {
+  await page.addInitScript(({ schema, defaults, tpsVariables, useOfficialSdk }) => {
     const clone = data => JSON.parse(JSON.stringify(data));
     let config = { ...clone(defaults), server_root: 'D:/Minecraft', unknown_setting: 'preserved',
       servers: Array.from({ length: 5 }, (_, i) => ({ id: 'server' + (i + 1), name: '服务器 ' + (i + 1), directory: 'server' + (i + 1), rcon_host: '127.0.0.1', rcon_port: 25575 + i,
@@ -37,7 +42,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
       config = clone(defaults); revision = 'revision-1'; window.latestConfig = clone(config);
       bindings.groups = []; bindings.servers = []; window.noPlatforms = true;
     };
-    window.AstrBotPluginPage = {
+    const backend = {
       ready: async () => ({ plugin_name: 'astrbot_plugin_mc_manager' }),
       apiGet: async (endpoint, params) => {
         window.apiCalls.push({ endpoint, params });
@@ -66,7 +71,24 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
         return { message: body.action === 'restart' ? '正在重启，等待广播。' : '测试操作完成。' };
       }
     };
-  }, { schema, defaults, tpsVariables });
+    if (useOfficialSdk) {
+      window.addEventListener('message', async event => {
+        const message = event.data;
+        if (event.source !== window || event.origin !== location.origin || message?.channel !== 'astrbot-plugin-page') return;
+        if (message.kind === 'ready') {
+          window.postMessage({ channel: 'astrbot-plugin-page', kind: 'context', context: { plugin_name: 'astrbot_plugin_mc_manager', page_name: 'console', view_name: 'console', locale: 'zh-CN', theme: 'dark', i18n: {} } }, location.origin);
+        } else if (message.kind === 'request') {
+          try {
+            if (!['api:get', 'api:post'].includes(message.action)) throw new Error('Unexpected bridge action: ' + message.action);
+            const data = message.action === 'api:get' ? await backend.apiGet(message.endpoint, message.params) : await backend.apiPost(message.endpoint, message.body);
+            window.postMessage({ channel: 'astrbot-plugin-page', kind: 'response', requestId: message.requestId, ok: true, data }, location.origin);
+          } catch (error) {
+            window.postMessage({ channel: 'astrbot-plugin-page', kind: 'response', requestId: message.requestId, ok: false, error: error.message }, location.origin);
+          }
+        }
+      });
+    } else window.AstrBotPluginPage = backend;
+  }, { schema, defaults, tpsVariables, useOfficialSdk: Boolean(officialSdk) });
   const clickTab = name => page.locator(`[data-settings-tab="${name}"]`).click();
   async function save() {
     const count = await page.evaluate(() => window.apiCalls.filter(c => c.endpoint === 'config' && c.body).length);
@@ -256,6 +278,6 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
     assert.deepEqual(await page.evaluate(() => window.latestConfig.groups[0].server_ids), ['server1']);
     assert.equal(await page.locator('#configured-groups article').count(), 1);
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: server/group forms, historical isolation, passwords, admins, common settings, commands/menu/broadcasts, spark templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): server/group forms, historical isolation, passwords, admins, common settings, commands/menu/broadcasts, spark templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,2 +1,2 @@
 # Plugin core uses Python's standard library only.
-# astrbot.api and its Web API are provided by AstrBot >=4.26.3.
+# astrbot.api and its Web API are provided by AstrBot >=4.28.0.

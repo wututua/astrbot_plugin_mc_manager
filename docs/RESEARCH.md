@@ -1,5 +1,9 @@
 # 调研记录与实现选择
 
+## v1.1.0 当前基线
+
+当前适配范围已按用户要求升级为 AstrBot >=4.28.0,<5，正式发布包验证涵盖 4.28.0、4.28.1、4.28.2 和 4.29.0。新基类日志、异步配置、生命周期及 pages/views 差异见 [ASTRBOT_COMPATIBILITY.md](ASTRBOT_COMPATIBILITY.md)，完整结果见 [VALIDATION.md](VALIDATION.md)。下方保留之前版本的调研过程，4.26.3 只属于旧版兼容记录。
+
 调研使用 AstrBot 官方仓库、PyPI 发布包及 PaperMC 官方资料。查询时 PyPI 返回 AstrBot **4.28.2**，对应发布包要求 Python 3.12+。针对用户实际使用的 AstrBot 4.26.3，后续下载其正式发布包补充验证。v1.0.2 的适用版本在 metadata.yaml 中修正为 >=4.26.3,<5。
 
 ## AstrBot 4.26.3 兼容性补充

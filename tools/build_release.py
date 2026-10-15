@@ -61,18 +61,34 @@ def build(output_directory: Path | None = None) -> Path:
         paths.extend(p for p in (ROOT / directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
         for path in sorted(paths):
-            archive.write(path, prefix + path.relative_to(ROOT).as_posix())
+            relative = path.relative_to(ROOT).as_posix()
+            archive.write(path, prefix + relative)
+            # 4.28 discovers pages/, while 4.29 prefers views/. Both entries
+            # come from one maintained source so their content stays identical.
+            if relative.startswith("pages/"):
+                archive.write(path, prefix + "views/" + relative.removeprefix("pages/"))
     with ZipFile(output) as archive:
         if archive.testzip() is not None:
             raise ValueError("ZIP checksum validation failed")
         entries = set(archive.namelist())
-        for name in ("main.py", "metadata.yaml", "_conf_schema.json", "pages/console/index.html"):
+        for name in (
+            "main.py",
+            "metadata.yaml",
+            "_conf_schema.json",
+            "pages/console/index.html",
+            "views/console/index.html",
+        ):
             if prefix + name not in entries:
                 raise ValueError(f"ZIP is missing required file: {name}")
         validate_metadata(yaml.safe_load(archive.read(prefix + "metadata.yaml").decode("utf-8")))
+        for path in (ROOT / "pages").rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(ROOT / "pages").as_posix()
+                if archive.read(prefix + "pages/" + relative) != archive.read(prefix + "views/" + relative):
+                    raise ValueError("The pages and views entry files must match")
         if any(".research" in n or "sqlite" in n or "__pycache__" in n for n in entries):
             raise ValueError("ZIP contains a research, database, or cache file")
-    print(f"Built {output} ({output.stat().st_size:,} bytes; {len(paths)} files)")
+    print(f"Built {output} ({output.stat().st_size:,} bytes; {len(entries)} files)")
     return output
 
 

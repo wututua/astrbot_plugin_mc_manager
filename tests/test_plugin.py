@@ -13,7 +13,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_ROOT = Path(os.environ.get("MC_TEST_ASTRBOT_RELEASE", ROOT / ".research/release/astrbot"))
@@ -42,6 +42,8 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
             "astrbot.api.event",
             "astrbot.api.star",
             "astrbot.api.message_components",
+            "astrbot.core",
+            "astrbot.core.utils",
             "adapter_fixture",
         ]:
             module = types.ModuleType(name)
@@ -50,6 +52,12 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.modules["adapter_fixture"].__path__ = [str(ROOT)]
         self.patcher = patch.dict(sys.modules, self.modules)
         self.patcher.start()
+        upload_source = RELEASE_ROOT / "core/utils/upload.py"
+        if upload_source.is_file():
+            upload_spec = importlib.util.spec_from_file_location("astrbot.core.utils.upload", upload_source)
+            upload_module = importlib.util.module_from_spec(upload_spec)
+            sys.modules["astrbot.core.utils.upload"] = upload_module
+            upload_spec.loader.exec_module(upload_module)
         webspec = importlib.util.spec_from_file_location("astrbot.api.web", API_SOURCE)
         self.web = importlib.util.module_from_spec(webspec)
         sys.modules["astrbot.api.web"] = self.web
@@ -59,13 +67,18 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
             def save_config(inner):
                 self.saved = dict(inner)
 
+            async def save_config_async(inner):
+                inner.save_config()
+                return True
+
         self.Config = Config
         self.modules["astrbot.api"].AstrBotConfig = Config
         self.modules["astrbot.api"].logger = logging.getLogger("adapter-tests")
 
         class Star:
-            def __init__(inner, context):
+            def __init__(inner, context, config=None):
                 inner.context = context
+                inner.logger = logging.getLogger("adapter-tests")
 
         class StarTools:
             @classmethod
@@ -81,8 +94,12 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
                 inner.text = text
 
         class MessageChain:
-            def __init__(inner, chain):
-                inner.chain = chain
+            def __init__(inner, chain=None):
+                inner.chain = chain or []
+
+            def message(inner, text):
+                inner.chain.append(Plain(text))
+                return inner
 
         self.modules["astrbot.api.message_components"].Plain = Plain
         self.modules["astrbot.api.event"].MessageChain = MessageChain
@@ -140,7 +157,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         await self.plugin.terminate()
         self.patcher.stop()
         for name in list(sys.modules):
-            if name.startswith("adapter_fixture.") or name == "astrbot.api.web":
+            if name.startswith("adapter_fixture.") or name in {"astrbot.api.web", "astrbot.core.utils.upload"}:
                 sys.modules.pop(name, None)
         self.temp.cleanup()
 
@@ -269,7 +286,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
                 default_config_tmpl={"token": "private-platform-token"},
             )
         )
-        self.context.platform_manager = types.SimpleNamespace(platform_insts=[platform])
+        self.context.platform_manager = types.SimpleNamespace(get_insts=lambda: [platform])
         with self.bound_request():
             response = await self.plugin.page_config()
         data = json.loads(response.body)
@@ -367,3 +384,60 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("不能改绑", json.loads(response.body)["message"])
         self.assertIs(self.plugin.service, current)
         self.assertEqual(self.plugin.settings.groups["g1"].group_id, "100")
+
+    async def test_web_routes_are_registered_after_initialization_and_preserve_other_plugins(self):
+        def another_handler():
+            return None
+
+        other = ("/another_plugin/status", another_handler, ["GET"], "another plugin")
+        self.context.registered_web_apis.append(other)
+        await self.plugin.initialize()
+        self.assertEqual(len(self.context.registered_web_apis), 7)
+        await self.plugin.terminate()
+        self.assertEqual(self.context.registered_web_apis, [other])
+
+    async def test_broadcast_uses_public_message_chain_and_context_sender(self):
+        received = []
+
+        async def send(origin, chain):
+            received.append((origin, [component.text for component in chain.chain]))
+            return True
+
+        self.context.send_message = send
+        self.assertTrue(await self.plugin._send("bot:GroupMessage:100", "重启成功"))
+        self.assertEqual(received, [("bot:GroupMessage:100", ["重启成功"])])
+
+    async def test_cancelled_config_write_finishes_before_cancellation_returns(self):
+        started = asyncio.Event()
+        release = asyncio.Event()
+        finished = asyncio.Event()
+
+        async def save():
+            started.set()
+            await release.wait()
+            finished.set()
+            return True
+
+        with patch.object(self.plugin.config, "save_config_async", side_effect=save):
+            task = asyncio.create_task(self.plugin._persist_config())
+            await started.wait()
+            task.cancel()
+            await asyncio.sleep(0)
+            self.assertFalse(task.done())
+            release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertTrue(finished.is_set())
+
+    async def test_superseded_framework_config_save_keeps_current_service(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["page_size"] = 20
+        current = self.plugin.service
+        with patch.object(self.plugin.config, "save_config_async", new=AsyncMock(side_effect=[False, True])):
+            with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+                response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("配置覆盖", json.loads(response.body)["message"])
+        self.assertIs(self.plugin.service, current)
+        self.assertFalse(current.closed)
+        self.assertNotIn("page_size", self.plugin.config)
