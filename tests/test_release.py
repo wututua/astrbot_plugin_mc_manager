@@ -1,22 +1,34 @@
 """Release regression tests, including AstrBot's actual archive inspector."""
 
 import ast
+import asyncio
 import copy
 import logging
 import os
+import posixpath
 import shutil
 import tempfile
 import types
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZipFile
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from tools.build_release import ROOT, build, validate_metadata
 
-RELEASE = ROOT / ".research" / "release" / "astrbot" / "core"
-HAS_OFFICIAL = (RELEASE / "star" / "updater.py").is_file() and (RELEASE / "zip_updater.py").is_file()
+RELEASE_ROOT = Path(os.environ.get("MC_TEST_ASTRBOT_RELEASE", ROOT / ".research/release/astrbot"))
+RELEASE = RELEASE_ROOT / "core"
+LEGACY_INSTALLER = (RELEASE / "star" / "updator.py").is_file()
+UPDATER_SOURCE = RELEASE / "star" / ("updator.py" if LEGACY_INSTALLER else "updater.py")
+ZIP_UPDATER_SOURCE = RELEASE / ("zip_updator.py" if LEGACY_INSTALLER else "zip_updater.py")
+UPDATER_CLASS = "PluginUpdator" if LEGACY_INSTALLER else "_PluginUpdater"
+ZIP_UPDATER_CLASS = "RepoZipUpdator" if LEGACY_INSTALLER else "_RepoZipUpdater"
+EXTRACT_METHOD = "unzip_file" if LEGACY_INSTALLER else "_extract_plugin_archive"
+HAS_OFFICIAL = UPDATER_SOURCE.is_file() and ZIP_UPDATER_SOURCE.is_file()
 
 
 def official_archive_inspector(allowed_root: Path):
@@ -53,26 +65,26 @@ def official_archive_inspector(allowed_root: Path):
     nodes = []
     for source, class_name, methods, base in [
         (
-            RELEASE / "zip_updater.py",
-            "_RepoZipUpdater",
+            ZIP_UPDATER_SOURCE,
+            ZIP_UPDATER_CLASS,
             {"_resolve_archive_root_dir", "_finalize_extracted_archive"},
             [],
         ),
         (
-            RELEASE / "star" / "updater.py",
-            "_PluginUpdater",
+            UPDATER_SOURCE,
+            UPDATER_CLASS,
             {
                 "find_plugin_metadata_entry",
                 "validate_plugin_metadata",
                 "inspect_plugin_archive",
                 "validate_plugin_archive",
-                "_extract_plugin_archive",
+                EXTRACT_METHOD,
             },
-            [ast.Name(id="_RepoZipUpdater", ctx=ast.Load())],
+            [ast.Name(id=ZIP_UPDATER_CLASS, ctx=ast.Load())],
         ),
     ]:
         tree = ast.parse(source.read_text(encoding="utf-8"))
-        if class_name == "_PluginUpdater":
+        if class_name == UPDATER_CLASS:
             nodes.extend(
                 copy.deepcopy(node)
                 for node in tree.body
@@ -90,7 +102,74 @@ def official_archive_inspector(allowed_root: Path):
         nodes.append(ast.ClassDef(name=class_name, bases=base, keywords=[], body=selected, decorator_list=[]))
     module = ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[]))
     exec(compile(module, "astrbot-release-archive-methods", "exec"), namespace)
-    return namespace["_PluginUpdater"]
+    return namespace[UPDATER_CLASS]
+
+
+def official_version_checker():
+    source = RELEASE / "star" / "star_manager.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    original = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_validate_astrbot_version_specifier"
+    )
+    method = copy.deepcopy(original)
+    method.decorator_list = []
+    module = ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[]))
+    namespace = {
+        "SpecifierSet": SpecifierSet,
+        "InvalidSpecifier": InvalidSpecifier,
+        "Version": Version,
+        "InvalidVersion": InvalidVersion,
+        "VERSION": "4.26.3",
+    }
+    exec(compile(module, str(source), "exec"), namespace)
+    return namespace["_validate_astrbot_version_specifier"]
+
+
+def discover_official_pages(plugin_root: Path):
+    source = RELEASE_ROOT / "dashboard" / "services" / "plugin_page_service.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    page = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "PluginPage")
+    service = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "PluginPageService")
+    needed = {"normalize_plugin_page_name", "get_plugin_root_dir", "resolve_plugin_pages_root", "discover_plugin_pages"}
+    methods = [
+        copy.deepcopy(node)
+        for node in service.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in needed
+    ]
+    if len(methods) != len(needed):
+        raise AssertionError("AstrBot page discovery methods have changed")
+
+    async def isdir(path):
+        return Path(path).is_dir()
+
+    async def isfile(path):
+        return Path(path).is_file()
+
+    namespace = {
+        "dataclass": dataclass,
+        "posixpath": posixpath,
+        "Path": Path,
+        "StarMetadata": types.SimpleNamespace,
+        "PLUGIN_PAGE_ROOT_DIR_NAME": "pages",
+        "PLUGIN_PAGE_ENTRY_FILE_NAME": "index.html",
+        "aio_ospath": types.SimpleNamespace(isdir=isdir, isfile=isfile),
+    }
+    module = ast.Module(
+        body=[
+            copy.deepcopy(page),
+            ast.ClassDef(name="PluginPageService", bases=[], keywords=[], body=methods, decorator_list=[]),
+        ],
+        type_ignores=[],
+    )
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+    instance = namespace["PluginPageService"]()
+    instance.plugin_manager = types.SimpleNamespace(
+        plugin_store_path=str(plugin_root.parent), reserved_plugin_path=str(plugin_root.parent)
+    )
+    metadata = types.SimpleNamespace(root_dir_name=plugin_root.name, reserved=False)
+    return asyncio.run(instance.discover_plugin_pages(metadata))
 
 
 class ReleaseTests(unittest.TestCase):
@@ -122,11 +201,11 @@ class ReleaseTests(unittest.TestCase):
     def test_release_zip_contains_install_files_and_consistent_version(self):
         with tempfile.TemporaryDirectory() as temp:
             path = build(Path(temp))
-            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.0.1.zip")
+            self.assertEqual(path.name, "astrbot_plugin_mc_manager-1.0.2.zip")
             with ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 metadata = validate_metadata(yaml.safe_load(archive.read("astrbot_plugin_mc_manager/metadata.yaml")))
-                self.assertEqual(metadata["version"], "v1.0.1")
+                self.assertEqual(metadata["version"], "v1.0.2")
                 for name in ("main.py", "_conf_schema.json", "mc_manager/service.py", "pages/console/index.html"):
                     self.assertIn("astrbot_plugin_mc_manager/" + name, archive.namelist())
                 self.assertFalse(any("sqlite" in name or ".research" in name for name in archive.namelist()))
@@ -153,10 +232,30 @@ class ReleaseTests(unittest.TestCase):
             inspector = official_archive_inspector(directory)
             inspected = inspector.inspect_plugin_archive(str(path))
             self.assertEqual(inspected["metadata"]["name"], "astrbot_plugin_mc_manager")
-            self.assertEqual(inspected["metadata"]["version"], "v1.0.1")
+            self.assertEqual(inspected["metadata"]["version"], "v1.0.2")
             destination = directory / "installed"
-            inspector()._extract_plugin_archive(str(path), str(destination))
+            getattr(inspector(), EXTRACT_METHOD)(str(path), str(destination))
             for name in ("main.py", "metadata.yaml", "_conf_schema.json", "pages/console/index.html"):
                 self.assertTrue((destination / name).is_file(), name)
             self.assertFalse((destination / "astrbot_plugin_mc_manager").exists())
             self.assertFalse(path.exists())
+            pages = discover_official_pages(destination)
+            self.assertEqual([page.name for page in pages], ["console"])
+
+    @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
+    def test_official_version_gate_accepts_4263_and_4282(self):
+        checker = official_version_checker()
+        for version in ("4.26.3", "4.28.2"):
+            with self.subTest(version=version):
+                checker.__globals__["VERSION"] = version
+                self.assertEqual(checker(self.metadata()["astrbot_version"]), (True, None))
+        checker.__globals__["VERSION"] = "5.0.0"
+        self.assertFalse(checker(self.metadata()["astrbot_version"])[0])
+
+    @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
+    def test_official_version_gate_reproduces_previous_rejection(self):
+        checker = official_version_checker()
+        checker.__globals__["VERSION"] = "4.26.3"
+        valid, error = checker(">=4.28.2,<5")
+        self.assertFalse(valid)
+        self.assertEqual(error, "AstrBot 4.26.3 does not satisfy plugin astrbot_version: >=4.28.2,<5")

@@ -7,6 +7,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+import os
 import sys
 import tempfile
 import types
@@ -15,7 +16,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
-API_SOURCE = ROOT / ".research/release/astrbot/api/web.py"
+RELEASE_ROOT = Path(os.environ.get("MC_TEST_ASTRBOT_RELEASE", ROOT / ".research/release/astrbot"))
+API_SOURCE = RELEASE_ROOT / "api/web.py"
 if not API_SOURCE.exists():
     try:
         spec = importlib.util.find_spec("astrbot")

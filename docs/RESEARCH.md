@@ -1,6 +1,18 @@
 # 调研记录与实现选择
 
-调研使用 AstrBot 官方仓库、PyPI 发布包及 PaperMC 官方资料。查询时 PyPI 返回 AstrBot **4.28.2**，对应发布包要求 Python 3.12+。插件适用版本在 metadata.yaml 中限定为 >=4.28.2,<5。
+调研使用 AstrBot 官方仓库、PyPI 发布包及 PaperMC 官方资料。查询时 PyPI 返回 AstrBot **4.28.2**，对应发布包要求 Python 3.12+。针对用户实际使用的 AstrBot 4.26.3，后续下载其正式发布包补充验证。v1.0.2 的适用版本在 metadata.yaml 中修正为 >=4.26.3,<5。
+
+## AstrBot 4.26.3 兼容性补充
+
+- 依据 PyPI 的 4.26.3 固定版本发布包，Python 要求同样是 >=3.12。
+- `astrbot/api/web.py`、`api/star/__init__.py`、`api/event/__init__.py`、`api/event/filter/__init__.py`、`dashboard/plugin_page_bridge.js` 与已检查的 4.28.2 版本内容一致。
+- 检查 4.26.3 的 `register_web_api()`、`send_message()`、`StarTools.get_data_dir()` 与事件身份方法，插件所需的调用方式可用。
+- 4.26.3 仍扫描 `pages/<名称>/index.html`；原始页面发现方法可以找到包内的 console 页面。
+- 安装器内部命名是 `PluginUpdator.unzip_file`，4.28.2 内部命名为 `_PluginUpdater._extract_plugin_archive`。插件本身不依赖这些内部名称，测试会选择对应的原始导入方法验证压缩包。
+- 使用 4.26.3 的 `_validate_astrbot_version_specifier()` 复现旧范围的拒绝信息，并验证新范围接受 4.26.3 与 4.28.2，拒绝 5.0.0。
+- 这次无需修改插件业务代码或移除管理页面，原因是公开接口已经兼容，之前的最低版本声明过高。
+
+固定版本来源： https://pypi.org/pypi/astrbot/4.26.3/json
 
 ## AstrBot 插件接口
 
@@ -53,6 +65,6 @@
 
 - 用标准库 unittest 与临时服务端目录验证白名单、群隔离、权限、持久化、故障重试和重启通知。
 - 用真实本机 TCP 测试 RCON 认证响应、多包/拆包、UTF-8、超时与 stop 后断线。
-- 对插件适配层使用 4.28.2 发布包的公开 Web 请求/响应实现做接口检查。
+- 对插件适配层使用 4.26.3 与 4.28.2 发布包的公开 Web 请求/响应实现做接口检查，原始安装器与页面发现方法也做了验证。
 - 管理页面通过模拟官方 bridge 做桌面和手机浏览器验证；模拟数据不等于真实 AstrBot 已部署。
 - 本工作区没有用户真实平台实例、MC 服务端、RCON 密码或启动脚本，因此没有发送真实停服命令。部署后的真实联调按 DEPLOY.md 进行。
