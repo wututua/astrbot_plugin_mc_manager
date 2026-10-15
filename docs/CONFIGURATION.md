@@ -37,9 +37,21 @@
 | `rcon_password_env` | 空 | 密码环境变量名，非空时优先读取，缺失不会回退 |
 | `online_mode` | `false` | `false` 离线 UUID，`true` 查询正版 UUID |
 | `players_command` | `list` | 在线玩家和状态/就绪查询命令 |
-| `tps_command` | `spark tps` | TPS 的 RCON 查询命令 |
-| `tps_source` | `auto` | `auto` 优先本地报告，`rcon` 只用 RCON，`file` 只读报告 |
-| `spark_file` | `.astrbot-spark-tps.txt` | 本服目录内的报告相对路径 |
+| `tps_mode` | `spark` | `spark` 解析性能指标并使用模板；`native` 执行核心原生/自定义指令，完整返回回复 |
+| `tps_command` | 随模式选择 | spark 默认 `spark tps`，native 默认 `tps`；可填写该核心实际支持的单行查询命令 |
+| `tps_source` | `auto` | 仅 spark 生效：`auto` 优先本地报告，`rcon` 只用 RCON，`file` 只读报告；native 始终用 RCON |
+| `spark_file` | `.astrbot-spark-tps.txt` | 仅 spark 生效，本服目录内的报告相对路径 |
+
+原生模式的配置片段，合并到对应 `servers[]` 条目：
+
+```json
+{
+  "tps_mode": "native",
+  "tps_command": "tps"
+}
+```
+
+原生模式不会读取 spark 文件或使用 `messages.tps`、`messages.tps_warning`、`messages.tps_error`。切回 spark 后可以继续使用原有采集来源和模板。未填写 `tps_mode` 的旧配置保持 spark 行为。核心是否提供 `tps` 或其他命令应按实际版本确认。
 
 不同服务器目录不能重复。查询命令是单行控制台命令，不带 `/`，不支持换行拼接。更改 UUID 模式前核对实际服务端身份体系，同组所有服务器模式必须一致。
 

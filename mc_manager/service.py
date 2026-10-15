@@ -188,7 +188,8 @@ class Service:
         if sid in self.restart_tasks:
             return "重启监控中"
         file_error = ""
-        if kind == "tps" and server.tps_source in {"auto", "file"}:
+        native_tps = kind == "tps" and server.tps_mode == "native"
+        if kind == "tps" and not native_tps and server.tps_source in {"auto", "file"}:
             try:
                 report = await asyncio.to_thread(read_spark_report, server, self.settings.spark_file_max_age)
                 if parse_spark_tps(report).status == "未解析":
@@ -202,14 +203,15 @@ class Service:
         try:
             async with self.server_locks[sid]:
                 async with self.rcon_factory(server, self.settings.rcon_timeout) as client:
-                    result = safe_text(await client.command(command), 6000).strip()
-            if not result:
+                    response = await client.command(command)
+                    result = safe_text(response, None) if native_tps else safe_text(response, 6000).strip()
+            if not result.strip():
                 result = "服务端返回空响应"
-                if kind == "tps" and "spark" in command.lower():
+                if kind == "tps" and not native_tps and "spark" in command.lower():
                     result += "；spark 异步命令可能无法通过 RCON 回复，请按 TPS 文档启用附带的 JVM 采集器。"
                     if file_error:
                         result += "\n" + file_error
-            if any(
+            if not native_tps and any(
                 x in result.casefold()
                 for x in ("unknown command", "unknown or incomplete", "incorrect argument", "未知", "不完整")
             ):
@@ -222,6 +224,8 @@ class Service:
 
     def format_tps(self, sid: str, result: str) -> str:
         server = self.settings.servers[sid]
+        if server.tps_mode == "native":
+            return result
         metrics = parse_spark_tps(result, self.settings.tps_missing_value)
         values = {
             **metrics.values,

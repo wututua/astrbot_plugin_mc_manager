@@ -257,6 +257,46 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("重复绑定", response.body.decode())
         self.assertIs(self.plugin.service, original)
 
+    async def test_native_tps_mode_roundtrips_and_chat_returns_raw_command_reply(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0].update(tps_mode="native", tps_command="native:query", tps_source="file")
+        raw["messages"] = {"tps": "DO_NOT_FORMAT {tps_5s}"}
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.plugin.service.pause()
+        with self.bound_request():
+            config = json.loads((await self.plugin.page_config()).body)
+        self.assertEqual(config["config"]["servers"][0]["tps_mode"], "native")
+        payload = "Core TPS: 19.97\nTick time: 12.4 ms\nCPU: 35%\n"
+        original = self.FakeRcon.command
+
+        async def command(client, value):
+            return payload if value == "native:query" else await original(client, value)
+
+        with patch.object(self.FakeRcon, "command", command):
+            _, _, replies = await self.dispatch_command("/mc tps server1")
+        self.assertEqual(replies, [payload])
+
+    async def test_native_tps_chat_sends_every_chunk_and_web_returns_full_text(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0].update(tps_mode="native", tps_command="native:query")
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.plugin.service.pause()
+        payload = "Core metrics line: 19.99 TPS 40 ms\n" * 1200 + "END"
+        original = self.FakeRcon.command
+
+        async def command(client, value):
+            return payload if value == "native:query" else await original(client, value)
+
+        with patch.object(self.FakeRcon, "command", command):
+            event, _, replies = await self.dispatch_command("/mc tps server1")
+            self.assertEqual(replies, [])
+            self.assertGreater(len(event.sent), 1)
+            self.assertEqual("".join(event.sent), payload)
+            self.assertTrue(all(len(reply) <= 3500 for reply in event.sent))
+            with self.bound_request({"group": "g1", "action": "tps", "args": ["server1"]}):
+                response = await self.plugin.page_action()
+            self.assertEqual(json.loads(response.body)["message"], payload)
+
     async def test_registered_routes_and_unload_cleanup(self):
         self.assertEqual(len(self.context.registered_web_apis), 6)
         self.assertTrue(all(x[0].startswith("/astrbot_plugin_mc_manager/") for x in self.context.registered_web_apis))

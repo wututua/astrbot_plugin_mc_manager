@@ -12,11 +12,13 @@ AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器�
 
 [下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](docs/CHANGELOG.md)
 
+原生 / spark TPS 模式选择目前为 `main` 的未发布改动，请更新仓库源码并重载；现有 Releases 安装包尚未包含。
+
 ## 主要功能
 
 - **群服共享**：一条配置绑定多个群，多条配置可选择同一服务器。
 - **白名单管理**：添加、查看、修改、移除，固定编号、成员归属和自动同步。
-- **玩家与性能**：在线玩家、状态、spark TPS / Tick 耗时 / CPU 查询。
+- **玩家与性能**：在线玩家、状态、服务端原生 TPS 或 spark TPS / Tick 耗时 / CPU 查询。
 - **重启与广播**：发送 `stop`，监控外部脚本重启，并向关联群通知结果。
 - **网页配置**：服务器、群聊、管理员、指令、菜单、回复模板及操作日志。
 
@@ -70,7 +72,7 @@ AstrBot 需要能够读写各服的 `whitelist.json` 并连接 RCON。同机各�
 | `/mc 移除 <编号或玩家名>` | 移除自己的条目 |
 | `/mc 修改 <编号或玩家名> <新玩家名>` | 修改自己的条目 |
 | `/mc 玩家 [服务器 ID]` | 查询在线玩家 |
-| `/mc tps [服务器 ID]` | 查询 spark 性能 |
+| `/mc tps [服务器 ID]` | 按该服设置查询原生 TPS 或 spark 性能 |
 | `/mc 状态 [服务器 ID]` | 查询 RCON 可用状态 |
 | `/mc 服务器` | 查看本组服务器 |
 | `/mc 重启 <服务器 ID 或 all>` | 重启并监控结果，限管理员 |
@@ -94,7 +96,7 @@ AstrBot 需要能够读写各服的 `whitelist.json` 并连接 RCON。同机各�
 
 ## 使用提示
 
-- **TPS**：服务端需启用 spark。RCON 返回空响应时，可安装[可选 Java 采集器](companion/README.md)。
+- **TPS**：在“配置与菜单 → TPS 设置”按服选择原生或 spark 模式并自定义指令。原生模式完整返回命令回复；仅 spark 支持变量模板，RCON 回复为空时可使用[Java 采集器](companion/README.md)。
 - **重启**：插件只发送 `stop`，Java 进程重新启动由你的脚本或进程管理器负责。每个需要接收广播的群先发送一次 `/mc`。
 - **同步与升级**：接管后以数据库条目为同步依据，手工改文件可能被覆盖。更新时保留原配置和插件数据目录；每次改写白名单前会保留文件备份。
 

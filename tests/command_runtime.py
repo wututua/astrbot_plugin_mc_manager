@@ -151,6 +151,7 @@ class CommandEvent:
         self.is_at_or_wake_command = False
         self._extras = {}
         self.stopped = False
+        self.sent = []
         self.unified_msg_origin = f"{platform}:GroupMessage:{group}"
         self.plugins_name = None
 
@@ -197,4 +198,4 @@ class CommandEvent:
         return text
 
     async def send(self, message):
-        pass
+        self.sent.append(message)

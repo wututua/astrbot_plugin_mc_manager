@@ -2,6 +2,25 @@
 
 [返回项目说明](../README.md) · [配置字段](CONFIGURATION.md) · [Java 采集器](../companion/README.md)
 
+## 选择 TPS 查询方式
+
+聊天指令统一为 `/mc tps [服务器 ID]`。在管理面板“配置与菜单 → TPS 设置”或服务器编辑弹窗中，按服选择 `tps_mode`：
+
+| 模式 | 默认命令 | 机器人回复 |
+| --- | --- | --- |
+| `spark`（默认） | `spark tps` | 解析 TPS、Tick 耗时和 CPU，使用下文变量及消息模板 |
+| `native` | `tps` | 执行服务端核心原生或自定义指令，直接完整返回内容 |
+
+两种模式都可通过 `tps_command` 自定义实际指令。不同核心与版本的原生命令不完全相同，选择原生模式不会替服务端新增命令；配置不支持的命令时，机器人会直接返回其错误文本。
+
+原生模式只用 RCON，忽略 spark 数据来源和文件；不解析指标，也不使用 `messages.tps`、`messages.tps_warning` 或 `messages.tps_error`。它去除颜色码和不可显示控制字符，保留完整文字，不按旧的 6000/16000 字符限制截断。较长群聊回复按 3500 字符分段发送，网页保留完整文本；原有 RCON 1 MB 响应保护仍生效，超限会明确报错。
+
+旧配置没有 `tps_mode` 时保持 spark 行为。切换模式只在指令仍为旧模式默认值或空值时自动带出新默认值，自定义指令会保留。“使用 spark 默认配置”只重置当前 spark 模式服务器的指令和模板，不修改原生服务器。全部服务器选择原生时，网页禁用 spark 模板编辑。
+
+下文变量表和缺失值规则**仅适用于 spark 模式**。
+
+## spark 输出
+
 群聊指令仍为 `/mc tps [服务器 ID]`；控制台查询命令默认 `spark tps`。spark 的三组输出已拆成 19 个指标变量，可放在 `messages.tps` 中任意组合。
 
 ## 19 个指标变量
@@ -90,7 +109,7 @@ MC 进程 CPU：{cpu_process_1m}%
 {tps_warning}
 ```
 
-也可在管理面板“配置与菜单”中使用专门的 TPS 模板编辑框；下方可以展开完整变量表，修改会同步到完整 JSON。点击“使用 spark 默认配置”会把本配置的各服 `tps_command` 改为 `spark tps` 并恢复上述默认模板，之后点击“保存并生效”。
+也可在管理面板“配置与菜单”中使用专门的 TPS 模板编辑框；下方可以展开完整变量表，修改会同步到完整 JSON。点击“使用 spark 默认配置”只会把当前 spark 模式服务器的 `tps_command` 改为 `spark tps` 并恢复上述默认模板，之后点击“保存并生效”。
 
 默认配置文件用途：
 
@@ -115,7 +134,7 @@ MC 进程 CPU：{cpu_process_1m}%
 
 部分 spark 环境异步执行指令，而 RCON 的响应缓冲在命令返回时结束，可能拿不到之后的 spark 输出。spark 的 [issue 119](https://github.com/lucko/spark/issues/119) 记录了这个限制。等待同一个 RCON 缓冲不能可靠修复它。
 
-插件因此支持三种 `servers[].tps_source`：
+spark 模式支持三种 `servers[].tps_source`（原生模式不使用该字段）：
 
 | 值 | 行为 |
 |---|---|

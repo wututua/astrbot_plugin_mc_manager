@@ -234,6 +234,53 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     assert.equal(latest.servers.every(s => s.tps_command === 'spark tps'), true);
     assert.equal(latest.commands.add, 'add,申请');
 
+    // Per-server TPS mode: native uses full replies and keeps custom commands.
+    await page.locator('#tps-server1-mode').selectOption('native');
+    assert.equal(await page.locator('#tps-server1-command').inputValue(), 'tps');
+    assert.equal(await page.locator('#tps-server1-tps_source').isHidden(), true);
+    assert.equal(await page.locator('#tps-server1-spark_file').isDisabled(), true);
+    await page.locator('#tps-server1-command').fill('mycore:health detail');
+    await page.locator('#spark-defaults').click();
+    assert.equal(await page.locator('#tps-server1-mode').inputValue(), 'native');
+    assert.equal(await page.locator('#tps-server1-command').inputValue(), 'mycore:health detail');
+    await save();
+    latest = await page.evaluate(() => window.latestConfig);
+    assert.equal(latest.servers[0].tps_mode, 'native');
+    assert.equal(latest.servers[0].tps_command, 'mycore:health detail');
+    assert.equal(latest.servers.slice(1).every(server => server.tps_mode === 'spark'), true);
+
+    await clickTab('connections');
+    await page.locator('#configured-servers [data-id="server1"] button').filter({ hasText: '编辑服务器' }).click();
+    assert.equal(await page.locator('#entity-tps_mode').inputValue(), 'native');
+    assert.equal(await page.locator('#entity-spark_file').isHidden(), true);
+    await page.locator('#entity-tps_mode').selectOption('spark');
+    assert.equal(await page.locator('#entity-tps_command').inputValue(), 'mycore:health detail');
+    assert.equal(await page.locator('#entity-spark_file').isVisible(), true);
+    await page.locator('#entity-tps_command').fill('spark tps');
+    await page.locator('#entity-tps_mode').selectOption('native');
+    assert.equal(await page.locator('#entity-tps_command').inputValue(), 'tps');
+    await page.locator('#entity-tps_command').fill('mycore:health detail');
+    await page.locator('#entity-apply').click();
+    await save();
+    const mixedTps = await page.evaluate(() => window.latestConfig);
+    const nativeTps = JSON.parse(JSON.stringify(mixedTps));
+    for (const server of nativeTps.servers) { server.tps_mode = 'native'; if (server.id !== 'server1') delete server.tps_command; }
+    await clickTab('advanced');
+    await page.locator('#config-editor').fill(JSON.stringify(nativeTps));
+    await page.locator('#apply-json').click();
+    await clickTab('spark');
+    assert.equal(await page.locator('#tps-server2-command').inputValue(), 'tps');
+    assert.equal(await page.locator('#tps-template-editor').isDisabled(), true);
+    assert.equal(await page.locator('#spark-defaults').isDisabled(), true);
+    assert.equal(await page.locator('#tps-variable-details').isHidden(), true);
+    await page.locator('#tps-server2-mode').selectOption('spark');
+    assert.equal(await page.locator('#tps-server2-command').inputValue(), 'spark tps');
+    assert.equal(await page.locator('#tps-template-editor').isEnabled(), true);
+    await clickTab('advanced');
+    await page.locator('#config-editor').fill(JSON.stringify(mixedTps));
+    await page.locator('#apply-json').click();
+    await save();
+
     await clickTab('advanced');
     await page.locator('#config-editor').fill('{broken'); await page.locator('#save-config').click();
     await page.waitForFunction(() => document.getElementById('notice').textContent.includes('有效的 JSON'));
@@ -347,6 +394,6 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.locator('#entity-apply').click(); await save();
     assert.equal(await page.locator('#configuration-error').isHidden(), true);
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, spark templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

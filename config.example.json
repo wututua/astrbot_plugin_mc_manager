@@ -14,7 +14,8 @@
       "tps_command": "spark tps",
       "players_command": "list",
       "tps_source": "auto",
-      "spark_file": ".astrbot-spark-tps.txt"
+      "spark_file": ".astrbot-spark-tps.txt",
+      "tps_mode": "spark"
     },
     {
       "__template_key": "server",
@@ -29,7 +30,8 @@
       "tps_command": "spark tps",
       "players_command": "list",
       "tps_source": "auto",
-      "spark_file": ".astrbot-spark-tps.txt"
+      "spark_file": ".astrbot-spark-tps.txt",
+      "tps_mode": "spark"
     },
     {
       "__template_key": "server",
@@ -44,7 +46,8 @@
       "tps_command": "spark tps",
       "players_command": "list",
       "tps_source": "auto",
-      "spark_file": ".astrbot-spark-tps.txt"
+      "spark_file": ".astrbot-spark-tps.txt",
+      "tps_mode": "spark"
     },
     {
       "__template_key": "server",
@@ -59,7 +62,8 @@
       "tps_command": "spark tps",
       "players_command": "list",
       "tps_source": "auto",
-      "spark_file": ".astrbot-spark-tps.txt"
+      "spark_file": ".astrbot-spark-tps.txt",
+      "tps_mode": "spark"
     },
     {
       "__template_key": "server",
@@ -74,7 +78,8 @@
       "tps_command": "spark tps",
       "players_command": "list",
       "tps_source": "auto",
-      "spark_file": ".astrbot-spark-tps.txt"
+      "spark_file": ".astrbot-spark-tps.txt",
+      "tps_mode": "spark"
     }
   ],
   "groups": [

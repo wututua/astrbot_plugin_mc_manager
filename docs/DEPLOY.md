@@ -89,7 +89,7 @@ https://github.com/wututua/astrbot_plugin_mc_manager
 
 “在线”表示 RCON 查询可用；“离线或 RCON 不可用”可能由游戏进程停止、端口不可达或认证失败等原因导致，不等同于游戏端口一定离线。
 
-TPS 默认查询命令是 `spark tps`，需要服务端启用 spark。RCON 返回空响应时使用[可选 Java 采集器](../companion/README.md)。所有指标与可配置文本见 [TPS 变量表](TPS_VARIABLES.md)。
+TPS 可按服在网页“TPS 设置”选择 `spark` 或 `native`。spark 默认命令为 `spark tps`，需要服务端启用 spark；原生模式默认 `tps`，也可改成该核心提供的查询指令，完整返回文本且不使用变量模板。RCON 返回空响应时使用[可选 Java 采集器](../companion/README.md)。所有指标与可配置文本见 [TPS 变量表](TPS_VARIABLES.md)。
 
 ## 6. 自动重启与广播
 

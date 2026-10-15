@@ -4,6 +4,8 @@
 
 `astrbot-spark-agent.jar` 从运行 Minecraft 的 JVM 内读取已启用 spark 的公开 API，每 2 秒将 TPS、Tick 耗时和 CPU 报告原子写入工作目录的 `.astrbot-spark-tps.txt`。服务端能通过 RCON 完整返回 `spark tps` 时，可直接使用机器人插件，无需采集器。
 
+该采集器仅用于 `tps_mode: "spark"`。选择原生 TPS 模式时，插件只执行 RCON 查询，不读取本地报告。
+
 ## 环境与文件位置
 
 采集器依赖服务端存在可用的 `me.lucko.spark.api.SparkProvider`。它不会自行安装 spark，也不从机器人进程或其他服务器采集指标。

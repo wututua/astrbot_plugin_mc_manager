@@ -133,6 +133,7 @@ class Server:
     players_command: str = "list"
     tps_source: str = "auto"
     spark_file: str = ".astrbot-spark-tps.txt"
+    tps_mode: str = "spark"
 
 
 @dataclass(frozen=True)
@@ -228,13 +229,19 @@ class Settings:
             endpoints.add(endpoint)
             env = str(item.get("rcon_password_env", "")).strip()
             password = os.environ.get(env, "") if env else str(item.get("rcon_password", ""))
-            commands = [str(item.get("tps_command", "spark tps")), str(item.get("players_command", "list"))]
+            mode = item.get("tps_mode", "spark")
+            if not isinstance(mode, str) or mode not in {"spark", "native"}:
+                raise MCError(f"服务器 {sid} 的 TPS 查询方式必须为 spark 或 native。")
+            default_command = "spark tps" if mode == "spark" else "tps"
+            commands = [str(item.get("tps_command", default_command)), str(item.get("players_command", "list"))]
             if not host or any(not c or any(x in c for x in "\n\r\x00") or len(c) > 512 for c in commands):
                 raise MCError(f"服务器 {sid} 的 RCON 地址或查询命令无效。")
-            source = item.get("tps_source", "auto")
-            file_name = item.get("spark_file", ".astrbot-spark-tps.txt")
-            if source not in {"auto", "rcon", "file"}:
-                raise MCError("TPS 数据来源必须为 auto、rcon 或 file。")
+            source = item.get("tps_source", "auto") if mode == "spark" else "rcon"
+            file_name = (
+                item.get("spark_file", ".astrbot-spark-tps.txt") if mode == "spark" else ".astrbot-spark-tps.txt"
+            )
+            if not isinstance(source, str) or source not in {"auto", "rcon", "file"}:
+                raise MCError("spark 数据来源必须为 auto、rcon 或 file。")
             if (
                 not isinstance(file_name, str)
                 or not file_name
@@ -253,6 +260,7 @@ class Settings:
                 *commands,
                 source,
                 file_name,
+                mode,
             )
         self.groups: dict[str, Group] = {}
         bindings: set[tuple[str, str]] = set()

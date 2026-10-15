@@ -15,6 +15,7 @@ from .mc_manager.config import Actor, MCError, Settings, positive
 from .mc_manager.service import Service
 from .mc_manager.spark import DEFAULT_TPS_TEMPLATE, variables_table
 from .mc_manager.store import Store
+from .mc_manager.text import message_chunks
 
 PLUGIN_NAME = "astrbot_plugin_mc_manager"
 
@@ -142,6 +143,7 @@ class MCManagerPlugin(Star):
             words = event.get_message_str().strip().split(maxsplit=1)
             text = words[1] if len(words) > 1 else ""
         event.stop_event()
+        tps_reply = False
         try:
             user = str(event.get_sender_id() or "")
             actor = Actor(
@@ -154,12 +156,20 @@ class MCManagerPlugin(Star):
             )
             async with self.guard:
                 action, args = self.settings.route(text)
+                tps_reply = action == "tps"
                 result = await self._service().execute(actor, action, args)
         except MCError as exc:
             result = self.settings.render("error", error=exc)
         except Exception:
             self.logger.exception("MC 指令处理失败")
             result = self.settings.render("error", error="内部错误，请管理员检查 AstrBot 日志和同步状态。")
+        replies = message_chunks(result) if tps_reply else [result]
+        if len(replies) > 1:
+            # A stopped framework event may consume only the first yielded
+            # result. Send every long-response chunk before returning.
+            for reply in replies:
+                await event.send(event.plain_result(reply))
+            return
         yield event.plain_result(result)
 
     def _page_admin(self):

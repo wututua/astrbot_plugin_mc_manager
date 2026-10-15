@@ -57,11 +57,21 @@
             "default": false,
             "hint": "离线服使用 OfflinePlayer UUID；代理转发 UUID 的网络需确认与实际玩家一致。"
           },
+          "tps_mode": {
+            "description": "TPS 查询方式",
+            "type": "string",
+            "default": "spark",
+            "options": [
+              "spark",
+              "native"
+            ],
+            "hint": "spark：解析 TPS、Tick 和 CPU 指标，支持变量模板；native：执行服务端原生/自定义查询命令，完整返回内容。"
+          },
           "tps_command": {
-            "description": "TPS 控制台命令",
+            "description": "TPS 查询指令（可自定义）",
             "type": "string",
             "default": "spark tps",
-            "hint": "默认使用 spark tps。请确保服务端已安装 spark；其他命令仍可手动配置。"
+            "hint": "spark 模式默认 spark tps，原生模式默认 tps；按实际核心填写单行控制台命令，不带 /。原生模式不使用变量模板。"
           },
           "players_command": {
             "description": "玩家查询及启动就绪检查命令",
@@ -69,7 +79,7 @@
             "default": "list"
           },
           "tps_source": {
-            "description": "TPS 数据来源",
+            "description": "spark 数据来源",
             "type": "string",
             "default": "auto",
             "options": [
@@ -77,13 +87,13 @@
               "rcon",
               "file"
             ],
-            "hint": "auto：优先读取有效的本地 spark 采样，否则使用 RCON；rcon：只用命令回复；file：只读采集器文件。"
+            "hint": "仅 spark 模式生效。auto 优先有效的本地采集文件，否则使用 RCON；rcon 只用命令回复；file 只读采集器文件。原生模式固定使用 RCON。"
           },
           "spark_file": {
             "description": "本地 spark 指标文件",
             "type": "string",
             "default": ".astrbot-spark-tps.txt",
-            "hint": "本服目录内的相对路径。使用附带的 Java agent 时自动每 2 秒更新，适用于 spark RCON 回复为空的情况。"
+            "hint": "仅 spark 模式生效。本服目录内的相对路径；使用 Java agent 时每 2 秒更新。原生模式不会读取此文件。"
           }
         }
       }

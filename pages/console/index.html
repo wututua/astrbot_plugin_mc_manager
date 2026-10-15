@@ -52,7 +52,7 @@
         <button data-settings-tab="general" aria-pressed="false">常规设置</button>
         <button data-settings-tab="commands" aria-pressed="false">指令与菜单</button>
         <button data-settings-tab="messages" aria-pressed="false">回复与广播</button>
-        <button data-settings-tab="spark" aria-pressed="false">spark TPS</button>
+        <button data-settings-tab="spark" aria-pressed="false">TPS 设置</button>
         <button data-settings-tab="advanced" aria-pressed="false">高级 JSON</button>
       </nav>
       <div id="settings-connections" class="settings-section">
@@ -67,9 +67,10 @@
       </div>
       <div id="settings-messages" class="settings-section" hidden><div class="config-block"><h3>操作回复与重启广播</h3><p class="subtle">填写你希望发送到群聊的文字。保留 {变量} 可以插入玩家、服务器和操作结果。</p><div id="message-fields" class="message-grid"></div></div></div>
       <div id="settings-spark" class="settings-section" hidden>
+        <div class="config-block"><h3>TPS 查询方式与指令</h3><p class="subtle">每台服务器可独立选择服务端原生 TPS 或 spark 性能指标，也可自定义查询指令。原生模式完整返回服务端回复；只有 spark 使用变量和模板。原生命令是否可用取决于服务端核心。</p><div id="tps-server-fields"></div></div>
         <div class="config-block"><div class="section-head"><h3>spark TPS 回复</h3><button id="spark-defaults" class="secondary">使用 spark 默认配置</button></div>
-          <p class="subtle">该按钮会设置所有已配置服务器的查询命令为 spark tps，并恢复默认 TPS 回复。CPU 变量不带 %，Tick 耗时单位是毫秒。</p>
-          <div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div>
+          <p class="subtle">该按钮仅恢复 spark 模式服务器的查询命令和默认 TPS 模板。CPU 变量不带 %，Tick 耗时单位是毫秒。</p>
+          <p id="spark-template-hint" class="subtle"></p><div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div>
           <details id="tps-variable-details"><summary>查看 spark TPS 变量表</summary><div class="table-wrap"><table><thead><tr><th>占位符</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div><p class="subtle">med 是中位数；P95 是第 95 百分位。{result} 和 {tps_raw} 保留原始响应。</p></details>
           <div id="spark-message-fields"></div>
           <details><summary>spark 回复为空时如何采集</summary><p>包内的 companion/astrbot-spark-agent.jar 可通过 Java 启动参数加载，每 2 秒采集一次。TPS 数据来源 auto 会优先读取有效的本地报告；安装步骤在 companion/README.md 中。</p></details>

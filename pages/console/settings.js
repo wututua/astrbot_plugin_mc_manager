@@ -3,7 +3,9 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const list = value => Array.isArray(value) ? value.map(String) : String(value || '').split(/[,，\r\n]+/).map(v => v.trim()).filter(Boolean);
 const ranges = { page_size: [1, 100], sync_interval: [5, 3600], rcon_timeout: [1, 30], restart_timeout: [5, 3600], poll_interval: [1, 30], spark_file_max_age: [3, 300], rcon_port: [1, 65535], max_entries_per_user: [1, 100] };
-const entityRequired = new Set(['id', 'name', 'directory', 'rcon_host', 'rcon_port', 'platform_id', 'group_id', 'max_entries_per_user', 'tps_command', 'players_command', 'spark_file']);
+const entityRequired = new Set(['id', 'name', 'directory', 'rcon_host', 'rcon_port', 'platform_id', 'group_id', 'max_entries_per_user', 'tps_mode', 'tps_command', 'players_command', 'spark_file']);
+const modeLabels = { spark: 'spark 性能指标（支持变量模板）', native: '服务端原生 TPS（完整返回）' };
+const defaultTpsCommand = mode => mode === 'native' ? 'tps' : 'spark tps';
 const sourceLabels = { auto: '自动：优先本地采样，再尝试 RCON', rcon: 'RCON 命令回复', file: '本地 spark 采集文件' };
 
 function el(tag, text, className) {
@@ -52,7 +54,11 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
   function normalize(value) {
     checkShape(value);
     const result = defaults(schema, value);
-    result.servers = (result.servers || []).map(row => defaults(serverItems(), row));
+    result.servers = (result.servers || []).map(row => {
+      const server = defaults(serverItems(), row);
+      if (row.tps_command === undefined) server.tps_command = defaultTpsCommand(server.tps_mode);
+      return server;
+    });
     result.groups = (result.groups || []).map(row => {
       const group = defaults(groupItems(), row);
       group.group_id = [...new Set(list(group.group_id))].join(",");
@@ -72,6 +78,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     $('reload-config').disabled = busy || !loaded;
     $('add-server').disabled = busy || !loaded;
     $('add-group').disabled = busy || !loaded || !draft.servers?.length;
+    $('spark-defaults').disabled = busy || !loaded || !draft.servers?.some(server => server.tps_mode === 'spark');
   }
   function touch() {
     editVersion++;
@@ -116,7 +123,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       wrapper.classList.add('switch-field');
     } else if (item.options) {
       for (const optionValue of item.options) {
-        const option = el('option', key === 'tps_source' ? sourceLabels[optionValue] || optionValue : String(optionValue));
+        const option = el('option', key === 'tps_mode' ? modeLabels[optionValue] || optionValue : key === 'tps_source' ? sourceLabels[optionValue] || optionValue : String(optionValue));
         option.value = String(optionValue);
         control.append(option);
       }
@@ -160,6 +167,31 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       container.append(entry.wrapper);
     }
   }
+  function setTpsMode(server, mode) {
+    const previous = server.tps_mode || 'spark';
+    const command = String(server.tps_command || '');
+    if (!command.trim() || command === defaultTpsCommand(previous)) server.tps_command = defaultTpsCommand(mode);
+    server.tps_mode = mode;
+  }
+  function renderTpsServers() {
+    const container = $('tps-server-fields'); container.replaceChildren();
+    if (!draft.servers.length) container.append(el('p', '先在“服务器与群聊”中添加服务器，再选择 TPS 查询方式。', 'subtle'));
+    for (const server of draft.servers) {
+      const block = el('div', undefined, 'config-block');
+      block.append(el('h4', `${server.name || server.id}（${server.id}）`));
+      const grid = el('div', undefined, 'field-grid');
+      const mode = field('tps_mode', serverItems().tps_mode, server.tps_mode, { id: `tps-${server.id}-mode`, required: true, onChange: value => { setTpsMode(server, value); touch(); render(); } });
+      const command = field('tps_command', serverItems().tps_command, server.tps_command, { id: `tps-${server.id}-command`, required: true, onChange: value => { server.tps_command = value; touch(); } });
+      command.control.placeholder = defaultTpsCommand(server.tps_mode);
+      grid.append(mode.wrapper, command.wrapper);
+      for (const key of ['tps_source', 'spark_file']) {
+        const entry = field(key, serverItems()[key], server[key], { id: `tps-${server.id}-${key}`, required: server.tps_mode === 'spark', onChange: value => { server[key] = value; touch(); } });
+        entry.wrapper.hidden = server.tps_mode !== 'spark'; entry.control.disabled = server.tps_mode !== 'spark';
+        grid.append(entry.wrapper);
+      }
+      block.append(grid); container.append(block);
+    }
+  }
   function render() {
     const root = field('server_root', schema.server_root, draft.server_root, { id: 'setting-server-root', onChange: value => { draft.server_root = value; touch(); } });
     $('root-field').replaceChildren(root.wrapper);
@@ -172,6 +204,12 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     const tps = field('tps', schema.messages.items.tps, draft.messages.tps, { id: 'tps-template-editor', onChange: value => { draft.messages.tps = value; touch(); } });
     $('tps-template-field').replaceChildren(tps.wrapper);
     addFields('spark-message-fields', { tps_warning: schema.messages.items.tps_warning, tps_error: schema.messages.items.tps_error }, draft.messages, 'message-');
+    renderTpsServers();
+    const hasSpark = draft.servers.some(server => server.tps_mode === 'spark');
+    $('spark-template-hint').textContent = hasSpark ? '以下变量和模板仅用于 spark 模式。原生模式直接完整输出服务端回复。' : '当前没有 spark 模式服务器。原生模式直接完整输出，不使用以下变量或模板。';
+    for (const id of ['tps-template-editor', 'spark-tps_missing_value', 'spark-spark_file_max_age', 'message-tps_warning', 'message-tps_error']) $(id).disabled = !hasSpark;
+    $('tps-variable-details').hidden = !hasSpark;
+
     $('tps-variables').replaceChildren();
     for (const variable of variables) {
       const row = el('tr');
@@ -290,6 +328,24 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       }
       fields.set(key, entry); container.append(entry.wrapper);
     }
+    if (kind === 'server') {
+      let previousMode = row.tps_mode || 'spark';
+      const applyMode = () => {
+        const spark = fields.get('tps_mode').read() === 'spark';
+        for (const key of ['tps_source', 'spark_file']) {
+          const entry = fields.get(key);
+          entry.wrapper.hidden = !spark; entry.control.disabled = !spark;
+          entry.control.required = spark && entityRequired.has(key);
+        }
+      };
+      fields.get('tps_mode').control.addEventListener('change', () => {
+        const next = { tps_mode: previousMode, tps_command: fields.get('tps_command').read() };
+        setTpsMode(next, fields.get('tps_mode').read());
+        fields.get('tps_command').control.value = next.tps_command;
+        previousMode = next.tps_mode; applyMode();
+      });
+      applyMode();
+    }
     if (kind === 'group') {
       fields.get('id').control.addEventListener('input', () => {
         const next = { ...row, id: fields.get('id').read(), server_ids: fields.get('server_ids').read() };
@@ -359,8 +415,8 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
   $('spark-defaults').addEventListener('click', () => {
     try {
       commitJson(); draft.messages.tps = defaultTps;
-      for (const server of draft.servers) server.tps_command = 'spark tps';
-      touch(); render(); notice('已恢复 spark 默认命令和 TPS 模板，点击“保存并生效”应用。');
+      for (const server of draft.servers) if (server.tps_mode === 'spark') server.tps_command = 'spark tps';
+      touch(); render(); notice('已恢复 spark 服务器的默认命令和模板，原生服务器设置保留；点击“保存并生效”应用。');
     } catch (error) { notice(error.message, true); }
   });
   $('preview-help').addEventListener('click', () => {
@@ -401,7 +457,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     if (loaded && !force) return;
     const response = await api('apiGet', 'config');
     schema = response.schema;
-    if (!schema?.servers?.templates || !schema?.groups?.templates) throw new Error('管理页面需要新版配置接口，请重载插件后刷新页面。');
+    if (!schema?.servers?.templates?.server?.items?.tps_mode || !schema?.groups?.templates) throw new Error('管理页面需要新版配置接口，请重载插件后刷新页面。');
     platforms = response.platforms || [];
     bindings = response.bindings || { groups: [], servers: [] };
     variables = response.tps_variables || []; defaultTps = response.tps_default_template || '';

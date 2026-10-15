@@ -9,3 +9,5 @@ html[data-theme="light"]{--bg:#f2f5f1;--surface:#fff;--raised:#edf2eb;--line:#d5
 @media(max-width:720px){.settings-toolbar{padding:13px;gap:10px;align-items:flex-start}.settings-toolbar .buttons{justify-content:flex-end;gap:6px}.settings-toolbar button{font-size:12px;padding:8px 10px}.settings-toolbar h2{font-size:16px}.settings-tabs{gap:5px}.config-block{padding:16px}.field-grid,.message-grid{grid-template-columns:1fr;gap:16px}.message-grid .full-width{grid-column:1/-1}.configured-row{align-items:flex-start;flex-direction:column;padding:14px}.configured-row .buttons{flex-wrap:wrap}.config-dialog{padding:20px 16px}.config-dialog form>.buttons{bottom:-20px}.config-block .section-head{align-items:flex-start}.server-choices{padding:11px}}
 
 .config-field input[hidden]{display:none}
+
+.config-field[hidden]{display:none}
