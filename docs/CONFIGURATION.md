@@ -65,6 +65,25 @@
 
 `commands.prefix` 设置额外主指令别名，固定 `/mc` 保留。其余键有 `help`、`add`、`list`、`remove`、`modify`、`players`、`tps`、`status`、`servers`、`restart`、`logs`、`sync`、`import`。多个别名以逗号分隔，不能重复或含空白。
 
-`messages` 的全部默认文本见[默认配置](../config.default.json)，常用变量见 [README](../README.md#自定义指令与回复)。TPS 的 19 个指标与辅助变量见 [TPS_VARIABLES.md](TPS_VARIABLES.md)。普通花括号写为 `{{` 和 `}}`，不支持表达式与格式化代码。
+`messages` 的全部默认文本见[默认配置](../config.default.json)，常用模板变量见下文。TPS 的 19 个指标与辅助变量见 [TPS_VARIABLES.md](TPS_VARIABLES.md)。普通花括号写为 `{{` 和 `}}`，不支持表达式与格式化代码。
 
 网页不回传已保存密码，留空表示保留，显式清除才会清除。高级 JSON 的 `__KEEP__` 是保存接口的保留标记，不能用作新服务器的真实密码。发布示例配置时，应使用空密码、占位文字或环境变量引用。
+
+## 回复模板变量
+
+| 配置项（位于 `messages` 下） | 常用变量 |
+| --- | --- |
+| `added` / `removed` | `{id}`、`{player}`、`{sync}`；添加回复另有 `{user}` |
+| `modified` | `{id}`、`{old_player}`、`{player}`、`{sync}` |
+| `list` / `entry` | 列表：`{page}`、`{pages}`、`{total}`、`{entries}`；条目：`{id}`、`{player}`、`{owner}` |
+| `players` / `status` | `{server}`、`{result}` |
+| `tps` / `tps_warning` / `tps_error` | [spark 指标与辅助变量](TPS_VARIABLES.md) |
+| `servers` | `{entries}` |
+| `logs` / `log_entry` | 列表：`{page}`、`{pages}`、`{total}`、`{entries}`；记录：`{time}`、`{action}`、`{group}`、`{user}`、`{player}`、`{detail}` |
+| `restart_started` | `{servers}` |
+| `restart_success` | `{server}`、`{seconds}`、`{detail}` |
+| `restart_failed` | `{server}`、`{error}` |
+| `game_restart_success` | `{server}` |
+| `sync` / `import` / `error` | 同步：`{sync}`；导入：`{count}`、`{sync}`；错误：`{error}` |
+
+模板只支持变量替换；字面花括号写为 `{{`、`}}`，不支持表达式或属性访问。完整默认文本见[默认配置](../config.default.json)，TPS 指标详见 [TPS_VARIABLES.md](TPS_VARIABLES.md)。
