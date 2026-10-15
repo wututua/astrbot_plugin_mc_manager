@@ -12,20 +12,18 @@ AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器�
 
 [下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](docs/CHANGELOG.md)
 
-原生 / spark TPS 模式选择目前为 `main` 的未发布改动，请更新仓库源码并重载；现有 Releases 安装包尚未包含。
-
 ## 主要功能
 
 - **群服共享**：一条配置绑定多个群，多条配置可选择同一服务器。
 - **白名单管理**：添加、查看、修改、移除，固定编号、成员归属和自动同步。
 - **玩家与性能**：在线玩家、状态、服务端原生 TPS 或 spark TPS / Tick 耗时 / CPU 查询。
 - **重启与广播**：发送 `stop`，监控外部脚本重启，并向关联群通知结果。
-- **网页配置**：服务器、群聊、管理员、指令、菜单、回复模板及操作日志。
+- **网页管理**：蓝白简约界面，支持桌面和手机，可配置服务器、群聊、管理员、指令、菜单和回复模板，查看操作日志。
 
 <details>
 <summary>查看管理面板</summary>
 
-![Minecraft 管理面板](docs/screenshots/web-settings.png)
+![Minecraft 管理面板](docs/screenshots/desktop.png)
 
 </details>
 

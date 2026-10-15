@@ -1,6 +1,6 @@
 # 部署与首次联调
 
-本文适用于插件 v1.3.0、AstrBot `>=4.28.0,<5`、Python `3.12+`。首次使用可先阅读 [README](../README.md)，网页操作见[管理页面说明](WEB_PANEL.md)。
+本文适用于插件 v1.4.0、AstrBot `>=4.28.0,<5`、Python `3.12+`。首次使用可先阅读 [README](../README.md)，网页操作见[管理页面说明](WEB_PANEL.md)。
 
 ## 1. 准备文件访问与目录
 

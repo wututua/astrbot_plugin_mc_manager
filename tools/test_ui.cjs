@@ -18,7 +18,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     if (pathname === '/bridge-sdk.js' && officialSdk) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' }); res.end(officialSdk); return; }
     const target = path.resolve(root, 'pages/console', pathname === '/' ? 'index.html' : '.' + pathname);
     if (!target.startsWith(path.resolve(root, 'pages/console') + path.sep) || !fs.existsSync(target)) { res.writeHead(404); res.end(); return; }
-    const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+    const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' };
     res.writeHead(200, { 'Content-Type': types[path.extname(target)] || 'application/octet-stream' });
     let content = fs.readFileSync(target);
     if (officialSdk && path.extname(target) === '.html') content = content.toString('utf8').replace('<script type="module" src="./app.js">', '<script src="/bridge-sdk.js"></script><script type="module" src="./app.js">');
@@ -116,24 +116,37 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.waitForFunction(previous => window.apiCalls.filter(c => c.endpoint === 'config' && c.body).length > previous, count);
     await page.waitForFunction(() => !document.getElementById('save-config').disabled);
   }
-  async function screenshot(name) { await page.screenshot({ path: path.join(root, 'docs/screenshots', name), fullPage: true }); }
+  async function screenshot(name, fullPage = true) { await page.screenshot({ path: path.join(root, 'docs/screenshots', name), fullPage, animations: 'disabled' }); }
   try {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(() => document.getElementById('server-count').textContent === '5');
     fs.mkdirSync(path.join(root, 'docs/screenshots'), { recursive: true });
     assert.equal(await page.locator('.card').count(), 3);
+    await page.waitForFunction(() => document.getElementById('brand-logo').complete && document.getElementById('brand-logo').naturalWidth > 0);
+    assert.equal(await page.locator('#brand-logo').getAttribute('src'), './logo.png');
+    assert.equal(await page.locator('#page-title').textContent(), '服务器概览');
+    assert.equal(await page.locator('#overview-stats').isVisible(), true);
+    assert.equal(await page.locator('#feedback').isHidden(), true);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'desktop overview overflow');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('save-config')).backgroundColor), 'rgb(37, 99, 235)');
+
     await screenshot('desktop.png');
     await page.locator('#group').selectOption('group2');
     await page.waitForFunction(() => document.querySelectorAll('.card').length === 2);
     await page.locator('#group').selectOption('group1');
     await page.waitForFunction(() => document.querySelectorAll('.card').length === 3);
     await page.locator('[data-tab="whitelist"]').click();
+    assert.equal(await page.locator('#page-title').textContent(), '白名单管理');
+    assert.equal(await page.locator('#overview-stats').isHidden(), true);
     await page.waitForFunction(() => document.querySelectorAll('#entries tr').length === 2);
     await page.locator('#player').fill('Player123'); await page.locator('#add-form button').click();
     await page.waitForFunction(() => window.apiCalls.some(c => c.body?.action === 'add'));
     await page.locator('#entries button').filter({ hasText: '修改' }).first().click();
     await page.locator('#edit-player').fill('Player456'); await page.locator('#edit-form button[type="submit"]').click();
     await page.waitForFunction(() => window.apiCalls.some(c => c.body?.action === 'modify'));
+    assert.equal(await page.locator('#feedback').isVisible(), true);
+    await page.locator('#clear-output').click();
+    assert.equal(await page.locator('#feedback').isHidden(), true);
     await page.locator('#entries button').filter({ hasText: '移除' }).first().click();
     await page.locator('#confirm-dialog button[value="cancel"]').click();
     assert.equal(await page.evaluate(() => window.apiCalls.filter(c => c.body?.action === 'remove').length), 0);
@@ -146,6 +159,8 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.waitForFunction(() => window.apiCalls.some(c => c.endpoint === 'logs' && c.params.user === '123456789'));
 
     await page.locator('[data-tab="settings"]').click();
+    assert.equal(await page.locator('#scope-bar').isHidden(), true);
+    assert.equal(await page.locator('#page-title').textContent(), '配置与菜单');
     await page.waitForFunction(() => document.querySelectorAll('#configured-servers article').length === 5);
     assert.equal(await page.locator('#configured-groups article').count(), 2);
     assert.equal(await page.locator('#config-state').textContent(), '配置已保存');
@@ -173,7 +188,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.locator('#entity-fields input[value="server6"]').check();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'mobile dialog overflow');
-    await screenshot('add-group-mobile.png');
+    await screenshot('add-group-mobile.png', false);
     await page.setViewportSize({ width: 1280, height: 1000 });
     await page.locator('#config-dialog').evaluate(dialog => { dialog.scrollTop = 0; });
     await page.locator('#config-dialog').screenshot({ path: path.join(root, 'docs/screenshots/add-group.png') });
@@ -219,6 +234,13 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     assert.equal(await page.evaluate(() => window.latestConfig.groups.find(g => g.id === 'group1').group_id), '111111112,111111113');
 
     await clickTab('spark');
+    await page.locator('.tps-server-card').first().locator('.tps-source-options summary').click();
+    assert.equal(await page.locator('#tps-server1-tps_source').isVisible(), true);
+    await page.locator('#tps-server1-tps_source').selectOption('rcon');
+    await page.locator('#tps-server1-spark_file').fill('logs/spark-report.txt');
+    await save();
+    assert.equal(await page.evaluate(() => window.latestConfig.servers[0].tps_source), 'rcon');
+    assert.equal(await page.evaluate(() => window.latestConfig.servers[0].spark_file), 'logs/spark-report.txt');
     assert.equal(await page.locator('#tps-variables tr').count(), 27);
     await page.locator('#tps-template-editor').fill('{server}: {tps_5s} TPS / {cpu_process_1m}%');
     await page.locator('#spark-defaults').click();
@@ -343,6 +365,25 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     assert.equal(await page.evaluate(() => window.latestConfig.servers[0].rcon_password), '');
     assert.equal(await page.evaluate(() => window.latestConfig.servers[0].rcon_password_env), 'MC_RCON_CLEAR_TEST');
 
+    // Check every main/config view at narrow phones, tablets and desktop widths.
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: width < 600 ? 844 : 1000 });
+      for (const view of ['overview', 'whitelist', 'audit', 'settings']) {
+        await page.locator(`[data-tab="${view}"]`).click();
+        await page.locator('#' + view).waitFor({ state: 'visible' });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${view} overflow at ${width}`);
+        if (width === 390 && view === 'whitelist') await screenshot('whitelist-mobile.png');
+        if (width === 1440 && view === 'whitelist') await screenshot('whitelist.png');
+        if (width === 1440 && view === 'audit') await screenshot('audit.png');
+        if (view === 'settings') for (const section of ['connections', 'general', 'commands', 'messages', 'spark', 'advanced']) {
+          await clickTab(section);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${section} overflow at ${width}`);
+        }
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await clickTab('connections');
+
     // First install: setup uses form controls with no JSON knowledge required.
     await page.evaluate(() => window.resetEmptyConfig());
     await page.locator('#reload-config').click();
@@ -394,6 +435,10 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.locator('#entity-apply').click(); await save();
     assert.equal(await page.locator('#configuration-error').isHidden(), true);
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, blue responsive layout, provided logo, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+  } catch (error) {
+    const failureDir = path.join(root, '.research', 'ui-failures'); fs.mkdirSync(failureDir, { recursive: true });
+    await page.screenshot({ path: path.join(failureDir, 'browser-failure.png'), fullPage: true });
+    throw error;
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -54,6 +54,8 @@ def build(output_directory: Path | None = None) -> Path:
     )
     if core_version != version:
         raise ValueError("core version differs from metadata.yaml")
+    if (ROOT / "pages/console/logo.png").read_bytes() != (ROOT / "logo.png").read_bytes():
+        raise ValueError("The management page logo must match the plugin logo.png")
     output_dir = Path(output_directory) if output_directory is not None else ROOT / "dist"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{metadata['name']}-{version}.zip"
@@ -80,7 +82,9 @@ def build(output_directory: Path | None = None) -> Path:
             "logo.png",
             "_conf_schema.json",
             "pages/console/index.html",
+            "pages/console/logo.png",
             "views/console/index.html",
+            "views/console/logo.png",
         ):
             if prefix + name not in entries:
                 raise ValueError(f"ZIP is missing required file: {name}")

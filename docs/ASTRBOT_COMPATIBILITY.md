@@ -1,6 +1,6 @@
 # AstrBot 接口适配与升级
 
-当前插件 v1.3.0 声明支持 **AstrBot `>=4.28.0,<5`、Python `3.12+`**。4.28.0 是最低版本，4.29.0 是已验证的另一固定版本；该范围不表示所有未来 4.x 版本都经过测试，也不包含 AstrBot 5.x。
+当前插件 v1.4.0 声明支持 **AstrBot `>=4.28.0,<5`、Python `3.12+`**。4.28.0 是最低版本，4.29.0 是已验证的另一固定版本；该范围不表示所有未来 4.x 版本都经过测试，也不包含 AstrBot 5.x。
 
 ## 接口范围
 
@@ -34,7 +34,7 @@ astrbot_plugin_mc_manager/
 └── views/console/index.html
 ```
 
-CSS 与 JavaScript 同样复制并逐文件验证一致。4.28 使用 `pages`；4.29 优先 `views` 并保留 `pages` 回退。安装包只发现一个 console 页面。源码仓库安装使用 `pages` 即可。
+CSS、JavaScript 和页面本地 `logo.png` 同样复制并逐文件验证一致；页面图片与插件根目录 Logo 保持相同内容。4.28 使用 `pages`；4.29 优先 `views` 并保留 `pages` 回退。安装包只发现一个 console 页面。源码仓库安装使用 `pages` 即可。
 
 ## 验证矩阵
 

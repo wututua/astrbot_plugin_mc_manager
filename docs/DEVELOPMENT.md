@@ -88,7 +88,7 @@ node tools/test_ui.cjs
 
 默认使用 Playwright 管理的 Chromium。可以通过 `MC_TEST_CHROMIUM` 指定浏览器可执行文件，通过 `MC_TEST_PLAYWRIGHT_MODULE` 指定已有 Playwright 模块路径。
 
-设置 `MC_TEST_ASTRBOT_RELEASE` 后，浏览器测试会加载对应正式包的 `dashboard/plugin_page_bridge.js`；否则使用测试 bridge。后端和父页面交互使用模拟响应，不是完整 AstrBot 服务。脚本会更新 `docs/screenshots/` 的桌面/手机截图；提交前检查截图变化。
+设置 `MC_TEST_ASTRBOT_RELEASE` 后，浏览器测试会加载对应正式包的 `dashboard/plugin_page_bridge.js`；否则使用测试 bridge。后端和父页面交互使用模拟响应，不是完整 AstrBot 服务。测试覆盖 320 / 390 / 768 / 1024 / 1440 像素宽度下的四个功能页与六个配置分类，并验证 Logo 加载和蓝色主题。脚本会更新 `docs/screenshots/` 的桌面/手机截图；提交前检查截图变化。
 
 ## 构建安装包
 
@@ -98,7 +98,7 @@ node tools/test_ui.cjs
 python tools/build_release.py
 ```
 
-输出为 `dist/astrbot_plugin_mc_manager-<版本号>.zip`。构建会验证元数据、`pyproject.toml` 和 `mc_manager.__version__` 一致，包含 LICENSE、图标、网页、配置、文档及采集器；从一套网页源码生成相同的 `pages/` 与 `views/`，不包含测试、调研依赖、数据库或缓存。
+输出为 `dist/astrbot_plugin_mc_manager-<版本号>.zip`。构建会验证元数据、`pyproject.toml` 和 `mc_manager.__version__` 一致，包含 LICENSE、图标、网页、配置、文档及采集器；从一套网页源码生成相同的 `pages/` 与 `views/`，并检查页面本地 `logo.png` 与根目录 Logo 字节一致，不包含测试、调研依赖、数据库或缓存。
 
 如变更 agent 源码，先重编译 JAR，再构建插件 ZIP。直接从 GitHub 仓库安装时，AstrBot 使用源码中的 `pages/`；4.29 的页面发现同样保留该回退目录。
 

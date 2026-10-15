@@ -19,7 +19,7 @@ function notice(text, error = false) {
   $('notice').textContent = text;
   $('notice').classList.toggle('error', error);
 }
-function output(text) { $('output').textContent = text; }
+function output(text) { $('output').textContent = text; $('feedback').hidden = !text; }
 function groupId() {
   if (!$('group').value) throw new Error('请先在配置中添加群与服务器绑定。');
   return $('group').value;
@@ -73,15 +73,24 @@ function renderServers() {
   const container = $('server-cards');
   container.replaceChildren();
   const group = snapshot.groups.find(g => g.id === $('group').value);
+  $('selected-server-count').textContent = group?.server_ids.length || 0;
   if (!group) {
-    container.append(node('div', '还没有绑定群。打开「配置与菜单」，填写服务器目录、RCON 与群绑定。', 'empty'));
+    const empty = node('div', undefined, 'empty');
+    const configure = node('button', '添加服务器与群聊');
+    configure.addEventListener('click', () => work(() => selectTab('settings')));
+    empty.append(node('h3', '开始管理你的服务器'), node('p', '先配置服务端目录、连接信息和群聊绑定。'), configure);
+    container.append(empty);
     return;
   }
   for (const server of snapshot.servers.filter(s => group.server_ids.includes(s.id))) {
     const card = node('article', undefined, 'card');
     const head = node('div', undefined, 'card-head');
-    head.append(node('h3', server.name), node('span', server.status, 'badge' + (server.status === '在线' ? ' online' : '')));
-    card.append(head, node('div', server.id, 'sid'), node('div', server.directory, 'path'));
+    const status = server.status === '在线' ? ['在线', 'online'] : server.status === '重启中' ? ['重启中', 'restarting'] : server.status.includes('离线') ? ['离线', 'offline'] : [server.status === '探测中' ? '检测中' : '待检测', ''];
+    const badge = node('span', status[0], 'badge ' + status[1]); badge.title = server.status;
+    head.append(node('h3', server.name), badge);
+    const directory = node('details', undefined, 'server-directory');
+    directory.append(node('summary', '服务端目录'), node('div', server.directory, 'path'));
+    card.append(head, node('div', server.id, 'sid'), directory);
     if (server.pending) card.append(node('p', '待同步：' + server.pending, 'pending'));
     const buttons = node('div', undefined, 'buttons');
     buttons.append(actionButton('在线玩家', 'players', [server.id]), actionButton('TPS', 'tps', [server.id]),
@@ -106,7 +115,8 @@ async function loadSnapshot(probe) {
     option.value = group.id;
     $('group').append(option);
   }
-  if (!snapshot.groups.length) $('group').append(node('option', '尚未配置'));
+  $('group').disabled = !snapshot.groups.length;
+  if (!snapshot.groups.length) { const option = node('option', '尚未配置'); option.value = ''; $('group').append(option); }
   else if (snapshot.groups.some(g => g.id === selected)) $('group').value = selected;
   else $('group').value = snapshot.groups[0].id;
   const group = snapshot.groups.find(g => g.id === $('group').value);
@@ -159,9 +169,14 @@ async function loadCurrentTab() {
 }
 async function selectTab(tab) {
   currentTab = tab;
+  output('');
+  const titles = { overview: ['服务器概览', '查看服务器状态与同步进度。'], whitelist: ['白名单管理', '添加玩家，维护当前配置组的白名单。'], audit: ['操作日志', '查找每一次白名单和服务器操作。'], settings: ['配置与菜单', '管理连接、群聊和机器人回复。'] };
+  $('page-title').textContent = titles[tab][0]; $('page-subtitle').textContent = titles[tab][1];
+  $('scope-bar').hidden = tab === 'settings'; $('overview-stats').hidden = tab !== 'overview';
   document.querySelectorAll('[data-tab]').forEach(button => {
     const active = button.dataset.tab === tab;
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+    if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
   for (const id of ['overview', 'whitelist', 'audit', 'settings']) $(id).hidden = id !== tab;
   await loadCurrentTab();
@@ -172,12 +187,13 @@ for (const button of document.querySelectorAll('[data-tab]')) {
   }));
 }
 $('refresh').addEventListener('click', () => work(async () => { await loadSnapshot(true); await loadCurrentTab(); notice('状态已刷新。'); }));
-$('group').addEventListener('change', () => work(async () => { logPage = 1; await loadSnapshot(false); await loadCurrentTab(); }));
+$('group').addEventListener('change', () => work(async () => { logPage = 1; output(''); await loadSnapshot(false); await loadCurrentTab(); }));
 $('add-form').addEventListener('submit', event => { event.preventDefault(); work(async () => { await actionRequest('add', [$('player').value.trim()]); $('player').value = ''; }); });
 $('sync').addEventListener('click', () => work(() => actionRequest('sync')));
 $('import').addEventListener('click', async () => {
   if (await confirmAction('将合并本群各服文件里的白名单。手动导入可能重新引入曾删除、尚未同步的条目；导入条目由管理员管理。')) await work(() => actionRequest('import'));
 });
+$('clear-output').addEventListener('click', () => output(''));
 $('edit-cancel').addEventListener('click', () => $('edit-dialog').close());
 $('edit-form').addEventListener('submit', event => { event.preventDefault(); const name = $('edit-player').value.trim(); $('edit-dialog').close(); work(() => actionRequest('modify', [editingId, name])); });
 $('log-filter').addEventListener('submit', event => { event.preventDefault(); logPage = 1; work(loadLogs); });
@@ -190,7 +206,7 @@ await work(async () => {
   if (snapshot.config_error) {
     await selectTab('settings');
     notice('插件已加载，请在下方修正群或服务器配置后保存。', true);
-  } else notice('已连接 AstrBot。服务器状态会自动探测并更新，也可点击「刷新状态」立即检查。');
+  } else notice('后台已连接，服务器状态自动更新。');
 });
 
 setInterval(() => {

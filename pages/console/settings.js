@@ -177,19 +177,24 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     const container = $('tps-server-fields'); container.replaceChildren();
     if (!draft.servers.length) container.append(el('p', '先在“服务器与群聊”中添加服务器，再选择 TPS 查询方式。', 'subtle'));
     for (const server of draft.servers) {
-      const block = el('div', undefined, 'config-block');
+      const block = el('div', undefined, 'tps-server-card');
       block.append(el('h4', `${server.name || server.id}（${server.id}）`));
       const grid = el('div', undefined, 'field-grid');
       const mode = field('tps_mode', serverItems().tps_mode, server.tps_mode, { id: `tps-${server.id}-mode`, required: true, onChange: value => { setTpsMode(server, value); touch(); render(); } });
       const command = field('tps_command', serverItems().tps_command, server.tps_command, { id: `tps-${server.id}-command`, required: true, onChange: value => { server.tps_command = value; touch(); } });
       command.control.placeholder = defaultTpsCommand(server.tps_mode);
       grid.append(mode.wrapper, command.wrapper);
+      const sourceOptions = el('details', undefined, 'tps-source-options');
+      sourceOptions.hidden = server.tps_mode !== 'spark';
+      sourceOptions.append(el('summary', 'spark 采集选项'));
+      const sourceGrid = el('div', undefined, 'field-grid');
       for (const key of ['tps_source', 'spark_file']) {
         const entry = field(key, serverItems()[key], server[key], { id: `tps-${server.id}-${key}`, required: server.tps_mode === 'spark', onChange: value => { server[key] = value; touch(); } });
         entry.wrapper.hidden = server.tps_mode !== 'spark'; entry.control.disabled = server.tps_mode !== 'spark';
-        grid.append(entry.wrapper);
+        sourceGrid.append(entry.wrapper);
       }
-      block.append(grid); container.append(block);
+      sourceOptions.append(sourceGrid);
+      block.append(grid, sourceOptions); container.append(block);
     }
   }
   function render() {
@@ -269,7 +274,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       if (sharedGroups.length) name.append(el('small', `同时供 ${sharedGroups.map(g => g.group_id || g.id).join('、')} 使用`, 'field-hint'));
       label.append(checkbox, name); wrapper.append(label); choices.push(checkbox);
     }
-    wrapper.append(el('p', '服务器可以被多个配置组同时选择，共享服同步各组白名单并集；各组只管理自己的条目。同一配置的多个群号共享条目；同组各服 UUID 模式必须一致。保存后生效。', 'field-hint'));
+    wrapper.append(el('p', '共享服同步各组白名单并集，各组独立管理条目。同组服务器需使用相同 UUID 模式。', 'field-hint'));
     return { wrapper, read: () => choices.filter(c => c.checked && !c.disabled).map(c => c.value) };
   }
   function openEntity(kind, index = -1) {
@@ -290,7 +295,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     const container = $('entity-fields'); container.replaceChildren();
     $('entity-error').hidden = true;
     $('entity-title').textContent = `${index < 0 ? '添加' : '编辑'}${kind === 'server' ? '服务器' : '群聊'}`;
-    $('entity-intro').textContent = kind === 'server' ? '目录填写相对于共同父目录的文件夹。密码留空可保留已保存的密码。' : '选择消息平台，填写群号和管理员账号，再勾选服务器。修改群号会保留本配置组的白名单，重置广播会话；跨平台修改会清空用户归属，由管理员管理。';
+    $('entity-intro').textContent = kind === 'server' ? '目录填写相对路径，已有密码留空可保留。' : '多个群号用逗号或换行分隔，可重复选择共享服务器。' + (index >= 0 ? '更换平台会清空原用户归属。' : '');
     const persisted = kind === 'group' ? bindings.groups.find(g => g.id === row.id) : index >= 0 && JSON.parse(saved).servers.some(s => s.id === row.id);
     if (kind === 'group' && persisted) {
       if (!row.platform_id) row.platform_id = persisted.platform;
