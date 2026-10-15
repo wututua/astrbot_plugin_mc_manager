@@ -259,3 +259,111 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         by_name = {row["name"]: row for row in metrics}
         self.assertEqual(by_name["mspt_10s_p95"]["unit"], "ms")
         self.assertEqual(by_name["cpu_process_1m"]["unit"], "%")
+
+    async def test_config_form_schema_and_platform_options_do_not_leak_credentials(self):
+        platform = types.SimpleNamespace(
+            meta=lambda: types.SimpleNamespace(
+                id="qq-primary",
+                name="aiocqhttp",
+                adapter_display_name="QQ / OneBot",
+                default_config_tmpl={"token": "private-platform-token"},
+            )
+        )
+        self.context.platform_manager = types.SimpleNamespace(platform_insts=[platform])
+        with self.bound_request():
+            response = await self.plugin.page_config()
+        data = json.loads(response.body)
+        self.assertEqual(data["platforms"], [{"id": "qq-primary", "name": "aiocqhttp", "display_name": "QQ / OneBot"}])
+        self.assertIn("group_id", data["schema"]["groups"]["templates"]["group"]["items"])
+        self.assertIn("rcon_password", data["schema"]["servers"]["templates"]["server"]["items"])
+        self.assertTrue(data["revision"])
+        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100"}])
+        self.assertEqual(data["bindings"]["servers"], [{"server": "server1", "scope": "g1"}])
+        self.assertNotIn("private-platform-token", response.body.decode())
+        self.assertNotIn("private-secret", response.body.decode())
+
+    async def test_stale_config_revision_is_rejected_without_changes(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["page_size"] = 20
+        current = self.plugin.service
+        with self.bound_request({"config": raw, "revision": "stale-browser-tab"}):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("其他页面", json.loads(response.body)["message"])
+        self.assertIs(self.plugin.service, current)
+        self.assertFalse(current.closed)
+        self.assertIsNone(self.saved)
+
+    async def test_form_save_updates_group_admins_and_preserves_password(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0]["rcon_password"] = "__KEEP__"
+        raw["groups"][0]["admin_ids"] = ["admin-a", "admin-b"]
+        raw["groups"][0]["max_entries_per_user"] = 3
+        raw["commands"] = {"prefix": "minecraft", "add": "add,申请"}
+        raw["messages"] = {"restart_success": "恢复 {server}，用时 {seconds} 秒"}
+        old_revision = self.plugin.config_revision
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            with self.bound_request({"config": raw, "revision": old_revision}):
+                response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertNotEqual(self.plugin.config_revision, old_revision)
+        group = self.plugin.settings.groups["g1"]
+        self.assertEqual(group.admins, ("admin-a", "admin-b"))
+        self.assertEqual(group.max_entries, 3)
+        self.assertEqual(self.plugin.config["servers"][0]["rcon_password"], "private-secret")
+        with self.bound_request():
+            data = json.loads((await self.plugin.page_config()).body)
+        self.assertEqual(data["config"]["servers"][0]["rcon_password"], "__KEEP__")
+        with self.bound_request({"config": raw, "revision": old_revision}):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+
+    async def test_explicit_password_clear_is_persisted(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0]["rcon_password"] = ""
+        raw["servers"][0]["rcon_password_env"] = "NEW_MC_RCON_ENV"
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+                response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(self.plugin.config["servers"][0]["rcon_password"], "")
+        with self.bound_request():
+            response = await self.plugin.page_config()
+        self.assertEqual(json.loads(response.body)["config"]["servers"][0]["rcon_password"], "")
+
+    async def test_invalid_form_shapes_return_errors_and_keep_current_service(self):
+        for key, invalid in [
+            ("servers", {}),
+            ("servers", [None]),
+            ("groups", "bad"),
+            ("commands", []),
+            ("messages", []),
+        ]:
+            with self.subTest(key=key, invalid=invalid):
+                raw = json.loads(json.dumps(dict(self.plugin.config)))
+                raw[key] = invalid
+                current = self.plugin.service
+                with self.bound_request({"config": raw}):
+                    response = await self.plugin.page_save_config()
+                self.assertEqual(response.status_code, 400)
+                self.assertIs(self.plugin.service, current)
+                self.assertFalse(current.closed)
+
+    async def test_web_form_cannot_reassign_persisted_group_identity(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "different-group"
+        current = self.plugin.service
+        with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不能改绑", json.loads(response.body)["message"])
+        self.assertIs(self.plugin.service, current)
+        self.assertEqual(self.plugin.settings.groups["g1"].group_id, "100")

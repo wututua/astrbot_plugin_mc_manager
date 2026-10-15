@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
+import secrets
+from pathlib import Path
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
@@ -30,6 +33,8 @@ class MCManagerPlugin(Star):
         self.settings = Settings(dict(config))
         self.service: Service | None = None
         self.guard = asyncio.Lock()
+        self.config_revision = secrets.token_urlsafe(18)
+        self.config_schema = json.loads((Path(__file__).parent / "_conf_schema.json").read_text(encoding="utf-8"))
         self.data_dir = StarTools.get_data_dir(PLUGIN_NAME)
         MCCommandFilter.settings = self.settings
         for route, handler, methods, desc in [
@@ -159,6 +164,21 @@ class MCManagerPlugin(Star):
             logger.exception("MC 面板操作失败")
             return error_response("操作失败，请查看 AstrBot 日志和服务器状态。")
 
+    def _platform_options(self) -> list[dict[str, str]]:
+        manager = getattr(self.context, "platform_manager", None)
+        platforms = getattr(manager, "platform_insts", [])
+        options = []
+        for platform in platforms:
+            meta = platform.meta()
+            options.append(
+                {
+                    "id": str(meta.id),
+                    "name": str(meta.name),
+                    "display_name": str(getattr(meta, "adapter_display_name", None) or meta.name),
+                }
+            )
+        return options
+
     async def page_config(self):
         try:
             self._page_admin()
@@ -172,6 +192,19 @@ class MCManagerPlugin(Star):
                         "data_directory": str(self.data_dir),
                         "tps_default_template": DEFAULT_TPS_TEMPLATE,
                         "tps_variables": variables_table(),
+                        "schema": self.config_schema,
+                        "platforms": self._platform_options(),
+                        "revision": self.config_revision,
+                        "bindings": {
+                            "groups": [
+                                dict(row)
+                                for row in self._service().store.db.execute("SELECT id,platform,group_id FROM scopes")
+                            ],
+                            "servers": [
+                                dict(row)
+                                for row in self._service().store.db.execute("SELECT server,scope FROM bindings")
+                            ],
+                        },
                     }
                 )
         except MCError as exc:
@@ -186,8 +219,11 @@ class MCManagerPlugin(Star):
             raw = payload["config"]
             async with self.guard:
                 current = self._service()
+                if "revision" in payload and payload["revision"] != self.config_revision:
+                    raise MCError("配置已被其他页面修改，请先重新载入配置后再保存。")
                 if current.restart_tasks:
                     raise MCError("有服务器正在重启，等待重启监控结束后再保存配置。")
+                Settings(raw)
                 old_servers = {s["id"]: s for s in self.config.get("servers", [])}
                 for server in raw.get("servers", []):
                     if server.get("rcon_password") == "__KEEP__":
@@ -216,6 +252,7 @@ class MCManagerPlugin(Star):
                 self.settings = settings
                 MCCommandFilter.settings = settings
                 self.service = candidate
+                self.config_revision = secrets.token_urlsafe(18)
                 await candidate.start()
             return json_response({"message": "配置已保存并立即生效。"})
         except (MCError, TypeError, ValueError, KeyError) as exc:

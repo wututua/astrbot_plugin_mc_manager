@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-mc-manager"
-version = "1.0.3"
+version = "1.0.4"
 requires-python = ">=3.12"
 description = "Group-scoped Minecraft server management for AstrBot"
 

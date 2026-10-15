@@ -129,6 +129,15 @@ class Group:
 
 class Settings:
     def __init__(self, raw: dict):
+        if not isinstance(raw, dict):
+            raise MCError("配置必须为 JSON 对象。")
+        for key in ("servers", "groups"):
+            items = raw.get(key, [])
+            if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+                raise MCError(f"{key} 必须是 JSON 对象数组。")
+        for key in ("commands", "messages"):
+            if not isinstance(raw.get(key, {}), dict):
+                raise MCError(f"{key} 必须为 JSON 对象。")
         self.raw = raw
         root = str(raw.get("server_root", "")).strip()
         self.root = Path(root).expanduser().resolve() if root else None

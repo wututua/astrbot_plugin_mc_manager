@@ -48,7 +48,7 @@ $env:MC_RCON_2 = '你的 server2 RCON 密码'
 
 ## 3. 安装与填写配置
 
-安装 `astrbot_plugin_mc_manager-1.0.3.zip` 后，在 AstrBot 插件配置页逐项填写。完整示例是根目录 `config.example.json`，可复制到管理面板的配置编辑器后按实际值修改。
+安装 `astrbot_plugin_mc_manager-1.0.4.zip` 后，打开 **Minecraft 管理面板 → 配置与菜单 → 服务器与群聊**，在表单中填写共同父目录并添加服务器和群聊。详见 [WEB_PANEL.md](WEB_PANEL.md)。也可以在 AstrBot 原生插件配置页填写，或在高级 JSON 中应用根目录的 `config.example.json` 示例。
 
 群配置示例：
 

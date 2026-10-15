@@ -44,15 +44,37 @@
       <div class="pagination"><button id="prev" class="secondary">上一页</button><span id="log-page">第 1 页</span><button id="next" class="secondary">下一页</button></div>
     </section>
     <section id="settings" class="panel" hidden>
-      <div class="section-head"><h2>配置与回复模板</h2><button id="save-config">保存并生效</button></div>
-      <p class="subtle">也可以在 AstrBot 插件配置页填写。密码以 __KEEP__ 显示，保留该值即可保留原密码；新服务器请填写密码或环境变量。保存前会校验群绑定与指令别名。</p>
-      <div class="section-head"><h2>spark TPS 回复</h2><button id="spark-defaults" class="secondary">使用 spark 默认配置</button></div>
-      <p class="subtle">该按钮会设置本配置中所有服务器的查询命令为 spark tps，并恢复默认 TPS 回复。编辑后点击“保存并生效”。CPU 变量不含 %，Tick 耗时单位是毫秒。</p>
-      <label for="tps-template-editor">自定义 TPS 回复模板</label><textarea id="tps-template-editor" spellcheck="false" aria-label="TPS 回复模板"></textarea>
-      <details id="tps-variable-details"><summary>查看 spark TPS 变量表</summary><div class="table-wrap"><table><thead><tr><th>占位符</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div><p class="subtle">med 是中位数；P95 是第 95 百分位，95% 的样本不超过该值。缺失值显示配置的占位文字。{result} 和 {tps_raw} 保留原始输出。</p></details>
-      <details><summary>spark 回复为空时如何采集</summary><p>包内附带 companion/astrbot-spark-agent.jar。把它复制到服务端共同父目录，在每台服的 Java 启动命令中添加 <code>-javaagent:实际路径/astrbot-spark-agent.jar</code>，并从对应服务端目录启动。采集器会读取已安装的 spark API，每 2 秒生成本服 <code>.astrbot-spark-tps.txt</code>。默认 <code>tps_source=auto</code> 优先读取有效报告；超过 <code>spark_file_max_age</code> 的旧数据会拒绝使用。具体步骤在安装包的 companion/README.md 中。</p></details>
-      <label for="config-editor">完整配置 JSON</label><textarea id="config-editor" spellcheck="false" aria-label="配置 JSON"></textarea>
-      <details><summary>菜单与消息模板怎么修改</summary><p>commands.add 可以改为 add，commands.prefix 可以改为 minecraft。messages.help 是帮助菜单；messages.restart_success 与 messages.restart_failed 是群内重启广播。常用占位符：{prefix}、{player}、{id}、{server}、{result}、{error}、{seconds}、{entries}、{sync}。所有模板可在插件配置页单独编辑。</p></details>
+      <div class="settings-toolbar"><div><h2>配置与菜单</h2><span id="config-state" class="subtle" role="status">尚未加载</span></div><div class="buttons"><button id="reload-config" class="secondary">重新载入</button><button id="save-config">保存并生效</button></div></div>
+      <p class="subtle">添加服务器和群绑定后点击“保存并生效”。配置修改会先保存在本页草稿中，切换页面不会丢失。</p>
+      <nav class="settings-tabs" aria-label="配置分类">
+        <button data-settings-tab="connections" class="active" aria-pressed="true">服务器与群聊</button>
+        <button data-settings-tab="general" aria-pressed="false">常规设置</button>
+        <button data-settings-tab="commands" aria-pressed="false">指令与菜单</button>
+        <button data-settings-tab="messages" aria-pressed="false">回复与广播</button>
+        <button data-settings-tab="spark" aria-pressed="false">spark TPS</button>
+        <button data-settings-tab="advanced" aria-pressed="false">高级 JSON</button>
+      </nav>
+      <div id="settings-connections" class="settings-section">
+        <div class="config-block"><div class="section-head"><div><h3>服务器共同父目录</h3><p class="subtle">先填写所有服务端文件夹所在的目录，再添加各服务器。</p></div></div><div id="root-field"></div></div>
+        <div class="config-block"><div class="section-head"><div><h3>服务器配置</h3><span class="subtle">目录、RCON、UUID 模式与 TPS 数据来源</span></div><button id="add-server">添加服务器</button></div><div id="configured-servers" class="config-list"></div></div>
+        <div class="config-block"><div class="section-head"><div><h3>群与服务器绑定</h3><span class="subtle">选择消息平台，填写群号并勾选服务器</span></div><button id="add-group">添加群聊</button></div><div id="configured-groups" class="config-list"></div></div>
+      </div>
+      <div id="settings-general" class="settings-section" hidden><div class="config-block"><h3>同步、分页与重启监控</h3><div id="general-fields" class="field-grid"></div></div></div>
+      <div id="settings-commands" class="settings-section" hidden>
+        <div class="config-block"><h3>指令别名</h3><p class="subtle">多个别名用逗号分隔。例如“添加,add”，主指令不带开头的 /。</p><div id="command-fields" class="field-grid"></div></div>
+        <div class="config-block"><div class="section-head"><h3>帮助菜单</h3><button id="preview-help" class="secondary">预览菜单</button></div><div id="help-field"></div><pre id="help-preview" class="template-preview" hidden></pre></div>
+      </div>
+      <div id="settings-messages" class="settings-section" hidden><div class="config-block"><h3>操作回复与重启广播</h3><p class="subtle">填写你希望发送到群聊的文字。保留 {变量} 可以插入玩家、服务器和操作结果。</p><div id="message-fields" class="message-grid"></div></div></div>
+      <div id="settings-spark" class="settings-section" hidden>
+        <div class="config-block"><div class="section-head"><h3>spark TPS 回复</h3><button id="spark-defaults" class="secondary">使用 spark 默认配置</button></div>
+          <p class="subtle">该按钮会设置所有已配置服务器的查询命令为 spark tps，并恢复默认 TPS 回复。CPU 变量不带 %，Tick 耗时单位是毫秒。</p>
+          <div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div>
+          <details id="tps-variable-details"><summary>查看 spark TPS 变量表</summary><div class="table-wrap"><table><thead><tr><th>占位符</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div><p class="subtle">med 是中位数；P95 是第 95 百分位。{result} 和 {tps_raw} 保留原始响应。</p></details>
+          <div id="spark-message-fields"></div>
+          <details><summary>spark 回复为空时如何采集</summary><p>包内的 companion/astrbot-spark-agent.jar 可通过 Java 启动参数加载，每 2 秒采集一次。TPS 数据来源 auto 会优先读取有效的本地报告；安装步骤在 companion/README.md 中。</p></details>
+        </div>
+      </div>
+      <div id="settings-advanced" class="settings-section" hidden><div class="config-block"><h3>高级 JSON 编辑</h3><p class="subtle">用于批量导入或修改完整配置。编辑后点击“应用到表单”，检查内容后再保存。密码的 __KEEP__ 表示保留原密码。</p><label for="config-editor">完整配置 JSON</label><textarea id="config-editor" spellcheck="false" aria-label="配置 JSON"></textarea><button id="apply-json" class="secondary">应用到表单</button></div></div>
       <p class="subtle" id="data-directory"></p>
     </section>
     <section class="output-panel"><div class="section-head"><h2>操作反馈</h2><span class="subtle">重启结果会广播到对应群聊</span></div><pre id="output">等待操作。</pre></section>
@@ -60,6 +82,12 @@
   </main>
   <dialog id="confirm-dialog"><form method="dialog"><h2>确认操作</h2><p id="confirm-text"></p><div class="buttons"><button value="cancel" class="secondary">取消</button><button value="confirm" class="danger">确认</button></div></form></dialog>
   <dialog id="edit-dialog"><form id="edit-form"><h2>修改玩家名</h2><label for="edit-player">新玩家名</label><input id="edit-player" pattern="[A-Za-z0-9_]{3,16}" maxlength="16" required><div class="buttons"><button type="button" id="edit-cancel" class="secondary">取消</button><button type="submit">保存</button></div></form></dialog>
+  <dialog id="config-dialog" class="config-dialog"><form id="entity-form">
+    <div class="section-head"><h2 id="entity-title">编辑配置</h2><button type="button" id="entity-close" class="secondary" aria-label="关闭配置编辑">关闭</button></div>
+    <p id="entity-intro" class="subtle"></p><div id="entity-fields" class="field-grid"></div>
+    <p id="entity-error" class="form-error" role="alert" hidden></p>
+    <div class="buttons"><button type="button" id="entity-cancel" class="secondary">取消</button><button type="submit" id="entity-apply">加入配置草稿</button></div>
+  </form></dialog>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

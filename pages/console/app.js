@@ -1,3 +1,4 @@
+import { createSettings } from "./settings.js";
 const $ = id => document.getElementById(id);
 const bridge = window.AstrBotPluginView || window.AstrBotPluginPage;
 let snapshot = { groups: [], servers: [] };
@@ -5,9 +6,8 @@ let currentTab = 'overview';
 let logPage = 1;
 let logTotal = 0;
 let editingId = '';
-let configLoaded = false;
-let tpsDefaultTemplate = "";
 let running = false;
+const settings = createSettings({ api, work, notice, output, confirmAction, refresh: () => loadSnapshot(false) });
 
 function node(tag, text, className) {
   const el = document.createElement(tag);
@@ -33,6 +33,7 @@ async function work(fn) {
   if (running) return;
   running = true;
   document.querySelectorAll('button').forEach(b => b.disabled = true);
+  settings.setBusy(true);
   try { await fn(); }
   catch (err) { notice(err.message || String(err), true); output(err.message || String(err)); }
   finally {
@@ -40,11 +41,13 @@ async function work(fn) {
     document.querySelectorAll('button').forEach(b => b.disabled = false);
     $('prev').disabled = logPage <= 1;
     $('next').disabled = logPage * 20 >= logTotal;
+    settings.setBusy(false);
   }
 }
 async function confirmAction(text) {
   const dialog = $('confirm-dialog');
   $('confirm-text').textContent = text;
+  dialog.returnValue = 'cancel';
   return new Promise(resolve => {
     dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
     dialog.showModal();
@@ -147,25 +150,10 @@ async function loadLogs() {
   $('prev').disabled = logPage <= 1;
   $('next').disabled = logPage * 20 >= logTotal;
 }
-async function loadConfig() {
-  if (configLoaded) return;
-  const result = await api('apiGet', 'config');
-  $('config-editor').value = JSON.stringify(result.config, null, 2);
-  tpsDefaultTemplate = result.tps_default_template || '';
-  $('tps-template-editor').value = result.config.messages?.tps ?? tpsDefaultTemplate;
-  $('tps-variables').replaceChildren();
-  for (const variable of result.tps_variables || []) {
-    const row = node('tr');
-    for (const value of [variable.placeholder, variable.description, variable.unit || '—', variable.example]) row.append(node('td', value));
-    $('tps-variables').append(row);
-  }
-  $('data-directory').textContent = '插件数据库与日志：' + result.data_directory;
-  configLoaded = true;
-}
 async function loadCurrentTab() {
   if (currentTab === 'whitelist') await loadEntries();
   if (currentTab === 'audit') await loadLogs();
-  if (currentTab === 'settings') await loadConfig();
+  if (currentTab === 'settings') await settings.load();
 }
 for (const button of document.querySelectorAll('[data-tab]')) {
   button.addEventListener('click', () => work(async () => {
@@ -190,41 +178,6 @@ $('edit-form').addEventListener('submit', event => { event.preventDefault(); con
 $('log-filter').addEventListener('submit', event => { event.preventDefault(); logPage = 1; work(loadLogs); });
 $('prev').addEventListener('click', () => work(async () => { logPage = Math.max(1, logPage - 1); await loadLogs(); }));
 $('next').addEventListener('click', () => work(async () => { logPage++; await loadLogs(); }));
-function updateTpsTemplate(template, useSparkCommand = false) {
-  let config;
-  try { config = JSON.parse($('config-editor').value); }
-  catch { throw new Error('请先修正完整配置 JSON，再编辑 TPS 模板。'); }
-  if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('完整配置必须是 JSON 对象。');
-  if (config.messages != null && (typeof config.messages !== 'object' || Array.isArray(config.messages))) throw new Error('messages 必须是 JSON 对象。');
-  if (useSparkCommand && config.servers != null && !Array.isArray(config.servers)) throw new Error('servers 必须是 JSON 数组。');
-  config.messages = { ...(config.messages || {}), tps: template };
-  if (useSparkCommand) for (const server of config.servers || []) server.tps_command = 'spark tps';
-  $('config-editor').value = JSON.stringify(config, null, 2);
-  $('tps-template-editor').value = template;
-}
-$('tps-template-editor').addEventListener('input', () => {
-  try { updateTpsTemplate($('tps-template-editor').value); }
-  catch (error) { notice(error.message, true); }
-});
-$('config-editor').addEventListener('input', () => {
-  try {
-    const config = JSON.parse($('config-editor').value);
-    $('tps-template-editor').value = config.messages?.tps ?? tpsDefaultTemplate;
-  } catch { /* Keep the last valid template while JSON is being edited. */ }
-});
-$('spark-defaults').addEventListener('click', () => work(async () => {
-  if (!tpsDefaultTemplate) throw new Error('默认模板尚未加载，请刷新管理面板。');
-  updateTpsTemplate(tpsDefaultTemplate, true);
-  notice('已填写 spark 默认命令和回复模板；点击“保存并生效”应用。');
-}));
-$('save-config').addEventListener('click', () => work(async () => {
-  let config;
-  try { config = JSON.parse($('config-editor').value); } catch { throw new Error('配置不是有效的 JSON，请检查逗号、引号和花括号。'); }
-  const result = await api('apiPost', 'config', { config });
-  configLoaded = false;
-  await loadConfig(); await loadSnapshot(false);
-  notice(result.message); output(result.message);
-}));
 await work(async () => {
   if (!bridge) throw new Error('请从 AstrBot 的插件详情页打开管理面板。');
   await bridge.ready();
