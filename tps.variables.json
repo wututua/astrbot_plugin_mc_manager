@@ -1,0 +1,221 @@
+{
+  "command": "spark tps",
+  "variables": [
+    {
+      "name": "tps_5s",
+      "placeholder": "{tps_5s}",
+      "description": "最近 5 秒的 TPS",
+      "unit": "TPS",
+      "example": "13.24",
+      "category": "指标"
+    },
+    {
+      "name": "tps_10s",
+      "placeholder": "{tps_10s}",
+      "description": "最近 10 秒的 TPS",
+      "unit": "TPS",
+      "example": "13.37",
+      "category": "指标"
+    },
+    {
+      "name": "tps_1m",
+      "placeholder": "{tps_1m}",
+      "description": "最近 1 分钟的 TPS",
+      "unit": "TPS",
+      "example": "15.95",
+      "category": "指标"
+    },
+    {
+      "name": "tps_5m",
+      "placeholder": "{tps_5m}",
+      "description": "最近 5 分钟的 TPS",
+      "unit": "TPS",
+      "example": "19.03",
+      "category": "指标"
+    },
+    {
+      "name": "tps_15m",
+      "placeholder": "{tps_15m}",
+      "description": "最近 15 分钟的 TPS",
+      "unit": "TPS",
+      "example": "19.67",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_10s_min",
+      "placeholder": "{mspt_10s_min}",
+      "description": "最近 10 秒的最小 Tick 耗时",
+      "unit": "ms",
+      "example": "69.1",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_10s_med",
+      "placeholder": "{mspt_10s_med}",
+      "description": "最近 10 秒的 Tick 耗时中位数",
+      "unit": "ms",
+      "example": "74.3",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_10s_p95",
+      "placeholder": "{mspt_10s_p95}",
+      "description": "最近 10 秒的 Tick 耗时第 95 百分位",
+      "unit": "ms",
+      "example": "79.6",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_10s_max",
+      "placeholder": "{mspt_10s_max}",
+      "description": "最近 10 秒的最大 Tick 耗时",
+      "unit": "ms",
+      "example": "103.2",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_1m_min",
+      "placeholder": "{mspt_1m_min}",
+      "description": "最近 1 分钟的最小 Tick 耗时",
+      "unit": "ms",
+      "example": "31.1",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_1m_med",
+      "placeholder": "{mspt_1m_med}",
+      "description": "最近 1 分钟的 Tick 耗时中位数",
+      "unit": "ms",
+      "example": "64.6",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_1m_p95",
+      "placeholder": "{mspt_1m_p95}",
+      "description": "最近 1 分钟的 Tick 耗时第 95 百分位",
+      "unit": "ms",
+      "example": "77.0",
+      "category": "指标"
+    },
+    {
+      "name": "mspt_1m_max",
+      "placeholder": "{mspt_1m_max}",
+      "description": "最近 1 分钟的最大 Tick 耗时",
+      "unit": "ms",
+      "example": "103.5",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_system_10s",
+      "placeholder": "{cpu_system_10s}",
+      "description": "最近 10 秒的系统整体 CPU 使用率",
+      "unit": "%",
+      "example": "33",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_system_1m",
+      "placeholder": "{cpu_system_1m}",
+      "description": "最近 1 分钟的系统整体 CPU 使用率",
+      "unit": "%",
+      "example": "35",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_system_15m",
+      "placeholder": "{cpu_system_15m}",
+      "description": "最近 15 分钟的系统整体 CPU 使用率",
+      "unit": "%",
+      "example": "35",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_process_10s",
+      "placeholder": "{cpu_process_10s}",
+      "description": "最近 10 秒的 MC Java 进程 CPU 使用率",
+      "unit": "%",
+      "example": "14",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_process_1m",
+      "placeholder": "{cpu_process_1m}",
+      "description": "最近 1 分钟的 MC Java 进程 CPU 使用率",
+      "unit": "%",
+      "example": "14",
+      "category": "指标"
+    },
+    {
+      "name": "cpu_process_15m",
+      "placeholder": "{cpu_process_15m}",
+      "description": "最近 15 分钟的 MC Java 进程 CPU 使用率",
+      "unit": "%",
+      "example": "15",
+      "category": "指标"
+    },
+    {
+      "name": "server",
+      "placeholder": "{server}",
+      "description": "服务器显示名称",
+      "unit": "",
+      "example": "服务器 1",
+      "category": "辅助"
+    },
+    {
+      "name": "server_id",
+      "placeholder": "{server_id}",
+      "description": "服务器配置 ID",
+      "unit": "",
+      "example": "server1",
+      "category": "辅助"
+    },
+    {
+      "name": "tps_command",
+      "placeholder": "{tps_command}",
+      "description": "配置的控制台命令（RCON 查询时使用）",
+      "unit": "",
+      "example": "spark tps",
+      "category": "辅助"
+    },
+    {
+      "name": "result",
+      "placeholder": "{result}",
+      "description": "去掉颜色代码后的原始响应（兼容旧模板）",
+      "unit": "",
+      "example": "TPS from last ...",
+      "category": "辅助"
+    },
+    {
+      "name": "tps_raw",
+      "placeholder": "{tps_raw}",
+      "description": "去掉颜色代码后的原始响应，与 result 相同",
+      "unit": "",
+      "example": "TPS from last ...",
+      "category": "辅助"
+    },
+    {
+      "name": "tps_parse_status",
+      "placeholder": "{tps_parse_status}",
+      "description": "完整、部分或未解析",
+      "unit": "",
+      "example": "完整",
+      "category": "辅助"
+    },
+    {
+      "name": "tps_missing_fields",
+      "placeholder": "{tps_missing_fields}",
+      "description": "缺失或无效指标的变量名列表",
+      "unit": "",
+      "example": "mspt_10s_min, mspt_10s_med",
+      "category": "辅助"
+    },
+    {
+      "name": "tps_warning",
+      "placeholder": "{tps_warning}",
+      "description": "根据 tps_warning 模板生成的缺失提示；完整时为空",
+      "unit": "",
+      "example": "部分 spark 数据不可用…",
+      "category": "辅助"
+    }
+  ]
+}

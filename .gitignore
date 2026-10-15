@@ -1,0 +1,35 @@
+# Local research, test dependencies and generated output
+.research/
+dist/
+output/
+tmp/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Java / browser development output
+*.class
+node_modules/
+playwright-report/
+test-results/
+
+# Runtime data and local secrets
+*.sqlite3*
+.env
+.env.*
+!.env.example
+.astrbot-spark-tps.txt
+.mcwl-backups/
+
+# Editor / operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

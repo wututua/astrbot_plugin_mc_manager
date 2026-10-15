@@ -1,0 +1,6 @@
+# Development, isolated framework tests and release packaging only.
+# AstrBot provides runtime framework APIs; these are not plugin dependencies.
+PyYAML>=6.0,<7
+packaging>=24,<27
+fastapi>=0.115,<1
+ruff>=0.11,<1

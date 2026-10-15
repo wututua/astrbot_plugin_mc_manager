@@ -1,0 +1,19 @@
+[project]
+name = "astrbot-plugin-mc-manager"
+version = "1.2.3"
+requires-python = ">=3.12"
+description = "Group-scoped Minecraft server management for AstrBot"
+license = "MIT"
+
+[project.urls]
+Repository = "https://github.com/wututua/astrbot_plugin_mc_manager"
+Issues = "https://github.com/wututua/astrbot_plugin_mc_manager/issues"
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

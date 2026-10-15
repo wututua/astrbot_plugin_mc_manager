@@ -1,0 +1,410 @@
+{
+  "server_root": {
+    "description": "Minecraft 服务端共同父目录",
+    "type": "string",
+    "default": "",
+    "hint": "例如 Windows D:/Minecraft，或 Linux /srv/minecraft；容器需挂载可写目录。"
+  },
+  "servers": {
+    "description": "服务器配置",
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "server": {
+        "name": "Java 服务端",
+        "display_item": "name",
+        "items": {
+          "id": {
+            "description": "服务器唯一 ID",
+            "type": "string",
+            "default": "server1"
+          },
+          "name": {
+            "description": "显示名称",
+            "type": "string",
+            "default": "服务器 1"
+          },
+          "directory": {
+            "description": "相对于共同父目录的服务端文件夹",
+            "type": "string",
+            "default": "server1"
+          },
+          "rcon_host": {
+            "description": "RCON 地址",
+            "type": "string",
+            "default": "127.0.0.1"
+          },
+          "rcon_port": {
+            "description": "RCON 端口",
+            "type": "int",
+            "default": 25575,
+            "hint": "不同服务端必须使用不同端口。"
+          },
+          "rcon_password": {
+            "description": "RCON 密码",
+            "type": "string",
+            "default": "",
+            "hint": "也可使用下方环境变量；管理面板读取此字段会脱敏。"
+          },
+          "rcon_password_env": {
+            "description": "RCON 密码环境变量名（优先）",
+            "type": "string",
+            "default": ""
+          },
+          "online_mode": {
+            "description": "使用正版 UUID",
+            "type": "bool",
+            "default": false,
+            "hint": "离线服使用 OfflinePlayer UUID；代理转发 UUID 的网络需确认与实际玩家一致。"
+          },
+          "tps_command": {
+            "description": "TPS 控制台命令",
+            "type": "string",
+            "default": "spark tps",
+            "hint": "默认使用 spark tps。请确保服务端已安装 spark；其他命令仍可手动配置。"
+          },
+          "players_command": {
+            "description": "玩家查询及启动就绪检查命令",
+            "type": "string",
+            "default": "list"
+          },
+          "tps_source": {
+            "description": "TPS 数据来源",
+            "type": "string",
+            "default": "auto",
+            "options": [
+              "auto",
+              "rcon",
+              "file"
+            ],
+            "hint": "auto：优先读取有效的本地 spark 采样，否则使用 RCON；rcon：只用命令回复；file：只读采集器文件。"
+          },
+          "spark_file": {
+            "description": "本地 spark 指标文件",
+            "type": "string",
+            "default": ".astrbot-spark-tps.txt",
+            "hint": "本服目录内的相对路径。使用附带的 Java agent 时自动每 2 秒更新，适用于 spark RCON 回复为空的情况。"
+          }
+        }
+      }
+    }
+  },
+  "groups": {
+    "description": "群与服务器绑定",
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "group": {
+        "name": "群绑定",
+        "display_item": "group_id",
+        "items": {
+          "id": {
+            "description": "群配置唯一 ID",
+            "type": "string",
+            "default": "group1",
+            "hint": "用于关联本配置组的白名单与日志，保存后保持固定；QQ群号和平台实例可在网页中修改。"
+          },
+          "platform_id": {
+            "description": "AstrBot 平台实例 ID",
+            "type": "string",
+            "default": "",
+            "hint": "从消息平台选择实例 ID，或填写 /sid 的 Bot ID；更换平台时原用户归属会清空，条目由管理员管理。"
+          },
+          "group_id": {
+            "description": "群号 / 群 ID",
+            "type": "string",
+            "default": "",
+            "hint": "实际QQ群号或其他平台的群 ID；修改后保留本配置组白名单，旧广播会话重置。"
+          },
+          "server_ids": {
+            "description": "本群服务器 ID",
+            "type": "list",
+            "default": [],
+            "hint": "勾选本群服务器；删除群绑定并保存后释放服务器。转给另一配置组时按新组同步，不自动继承旧组成员。"
+          },
+          "admin_ids": {
+            "description": "本群插件管理员用户 ID",
+            "type": "list",
+            "default": [],
+            "hint": "AstrBot 全局管理员同时有管理权限；不会自动信任群头衔。"
+          },
+          "max_entries_per_user": {
+            "description": "普通成员每人白名单上限",
+            "type": "int",
+            "default": 1
+          },
+          "broadcast_origin": {
+            "description": "广播会话（可选）",
+            "type": "string",
+            "default": "",
+            "hint": "通常留空；插件在群里收到指令后自动记录 unified_msg_origin。"
+          }
+        }
+      }
+    }
+  },
+  "page_size": {
+    "description": "群聊白名单与日志每页条数",
+    "type": "int",
+    "default": 10
+  },
+  "sync_interval": {
+    "description": "在线探测、白名单同步与广播重试间隔（秒）",
+    "type": "int",
+    "default": 30
+  },
+  "rcon_timeout": {
+    "description": "单次 RCON 超时（秒）",
+    "type": "int",
+    "default": 5
+  },
+  "restart_timeout": {
+    "description": "重启总超时（秒）",
+    "type": "int",
+    "default": 180
+  },
+  "poll_interval": {
+    "description": "重启状态检查间隔（秒）",
+    "type": "int",
+    "default": 3
+  },
+  "game_broadcast": {
+    "description": "重启成功同时发送游戏内广播",
+    "type": "bool",
+    "default": true
+  },
+  "commands": {
+    "description": "自定义指令",
+    "type": "object",
+    "items": {
+      "prefix": {
+        "description": "主指令别名",
+        "type": "string",
+        "default": "mc",
+        "hint": "自定义主指令别名，逗号分隔、不带 /。mc 是正式注册的固定入口，修改此项后 /mc 仍可用。"
+      },
+      "help": {
+        "description": "帮助子指令别名",
+        "type": "string",
+        "default": "帮助,help",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "add": {
+        "description": "添加子指令别名",
+        "type": "string",
+        "default": "添加,add",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "list": {
+        "description": "查看子指令别名",
+        "type": "string",
+        "default": "查看,list",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "remove": {
+        "description": "移除子指令别名",
+        "type": "string",
+        "default": "移除,删除,remove",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "modify": {
+        "description": "修改子指令别名",
+        "type": "string",
+        "default": "修改,edit",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "players": {
+        "description": "在线玩家子指令别名",
+        "type": "string",
+        "default": "玩家,players",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "tps": {
+        "description": "TPS子指令别名",
+        "type": "string",
+        "default": "tps",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "status": {
+        "description": "状态子指令别名",
+        "type": "string",
+        "default": "状态,status",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "servers": {
+        "description": "服务器列表子指令别名",
+        "type": "string",
+        "default": "服务器,servers",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "restart": {
+        "description": "重启子指令别名",
+        "type": "string",
+        "default": "重启,restart",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "logs": {
+        "description": "日志子指令别名",
+        "type": "string",
+        "default": "日志,logs",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "sync": {
+        "description": "同步子指令别名",
+        "type": "string",
+        "default": "同步,sync",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "import": {
+        "description": "导入子指令别名",
+        "type": "string",
+        "default": "导入,import",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      }
+    }
+  },
+  "messages": {
+    "description": "自定义返回消息与菜单",
+    "type": "object",
+    "items": {
+      "help": {
+        "description": "帮助菜单完整文本",
+        "type": "text",
+        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "added": {
+        "description": "添加成功回复",
+        "type": "text",
+        "default": "已添加 #{id} {player}，所属用户：{user}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "removed": {
+        "description": "移除成功回复",
+        "type": "text",
+        "default": "已移除 #{id} {player}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "modified": {
+        "description": "修改成功回复",
+        "type": "text",
+        "default": "已修改 #{id} {old_player} → {player}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "list": {
+        "description": "白名单列表回复",
+        "type": "text",
+        "default": "本群白名单（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "entry": {
+        "description": "单条白名单格式",
+        "type": "text",
+        "default": "#{id} {player} · 所属：{owner}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "players": {
+        "description": "在线玩家回复",
+        "type": "text",
+        "default": "[{server}] 在线玩家：{result}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "tps": {
+        "description": "TPS 查询回复",
+        "type": "text",
+        "default": "[{server}] spark 性能\nTPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：\n{tps_5s} / {tps_10s} / {tps_1m} / {tps_5m} / {tps_15m}\nTick 耗时（毫秒，最小 / 中位数 / P95 / 最大）：\n最近10秒：{mspt_10s_min} / {mspt_10s_med} / {mspt_10s_p95} / {mspt_10s_max}\n最近1分钟：{mspt_1m_min} / {mspt_1m_med} / {mspt_1m_p95} / {mspt_1m_max}\nCPU（单位%，10秒 / 1分钟 / 15分钟）：\n系统：{cpu_system_10s} / {cpu_system_1m} / {cpu_system_15m}\nMC进程：{cpu_process_10s} / {cpu_process_1m} / {cpu_process_15m}{tps_warning}",
+        "hint": "spark 自定义回复。支持 19 个指标占位符，例如 {tps_5s}、{mspt_10s_p95}、{cpu_process_1m}，完整变量表在管理面板和 docs/TPS_VARIABLES.md。CPU 数字不含 %；Tick 耗时单位为 ms。"
+      },
+      "status": {
+        "description": "状态查询回复",
+        "type": "text",
+        "default": "[{server}] {result}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "servers": {
+        "description": "服务器列表回复",
+        "type": "text",
+        "default": "本群服务器：\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "error": {
+        "description": "操作失败回复",
+        "type": "text",
+        "default": "MC 操作失败：{error}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "logs": {
+        "description": "审计日志回复",
+        "type": "text",
+        "default": "本群操作日志（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "log_entry": {
+        "description": "单条日志格式",
+        "type": "text",
+        "default": "{time} | {action} | 群 {group} | 用户 {user} | {player} | {detail}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "sync": {
+        "description": "同步操作回复",
+        "type": "text",
+        "default": "{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "import": {
+        "description": "导入操作回复",
+        "type": "text",
+        "default": "已导入 {count} 条未托管条目（无归属，限管理员管理）。\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_started": {
+        "description": "开始重启回复",
+        "type": "text",
+        "default": "正在重启 {servers}，将向本群广播结果。",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_success": {
+        "description": "重启成功群广播",
+        "type": "text",
+        "default": "✅ {server} 重启成功，耗时 {seconds} 秒。{detail}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_failed": {
+        "description": "重启失败群广播",
+        "type": "text",
+        "default": "❌ {server} 重启失败：{error}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "game_restart_success": {
+        "description": "重启成功游戏内广播",
+        "type": "text",
+        "default": "服务器 {server} 已重启成功。",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "tps_warning": {
+        "description": "spark 部分指标缺失提示",
+        "type": "text",
+        "default": "\n部分 spark 数据不可用：{tps_missing_fields}\n原始输出：\n{tps_raw}",
+        "hint": "完整解析时 {tps_warning} 为空；部分缺失时按本模板生成，支持 {tps_missing_fields} 和 {tps_raw}。可留空。"
+      },
+      "tps_error": {
+        "description": "spark 查询失败或未能解析时的回复",
+        "type": "text",
+        "default": "[{server}] spark TPS 查询失败或无法解析：\n{tps_raw}",
+        "hint": "没有解析出任何指标时使用。支持 {server}、{server_id}、{tps_raw}、{result} 等变量。"
+      }
+    }
+  },
+  "tps_missing_value": {
+    "description": "spark 指标缺失时显示的文字",
+    "type": "string",
+    "default": "暂无数据",
+    "hint": "1～32 字符单行文本。缺失指标不会被自动填成 0 或 20。"
+  },
+  "spark_file_max_age": {
+    "description": "本地 spark 采样最大有效秒数",
+    "type": "int",
+    "default": 10,
+    "hint": "过期数据会拒绝使用，默认 10 秒。Java agent 停止或服务器退出后不会继续返回旧数值。"
+  }
+}

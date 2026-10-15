@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Minecraft 管理面板</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div class="brand"><span class="mark" aria-hidden="true">M</span><div><div class="eyebrow">ASTRBOT / MINECRAFT</div><h1>群服管理</h1></div></div>
+      <button id="refresh" class="secondary">刷新状态</button>
+    </header>
+    <p class="lead">按群同步白名单，在这里查看服务器状态与每一次操作。</p>
+    <div id="notice" role="status" aria-live="polite">正在连接 AstrBot…</div>
+    <div id="configuration-error" class="form-error" role="alert" hidden></div>
+    <section class="stats" aria-label="管理概况">
+      <div><span>管理服务器</span><strong id="server-count">—</strong></div>
+      <div><span>绑定群聊</span><strong id="group-count">—</strong></div>
+      <div><span>待同步服务器</span><strong id="pending-count">—</strong></div>
+      <div><span>待发送广播</span><strong id="notification-count">—</strong></div>
+    </section>
+    <nav class="tabs" aria-label="面板功能">
+      <button data-tab="overview" class="active" aria-pressed="true">服务器</button>
+      <button data-tab="whitelist" aria-pressed="false">白名单</button>
+      <button data-tab="audit" aria-pressed="false">操作日志</button>
+      <button data-tab="settings" aria-pressed="false">配置与菜单</button>
+    </nav>
+    <div class="group-bar"><label for="group">当前群</label><select id="group"><option value="">尚未配置</option></select><span id="group-info"></span></div>
+    <section id="overview" class="panel">
+      <div class="section-head"><h2>本群服务器</h2><span class="subtle">只操作当前群绑定的服务器</span></div>
+      <div id="server-cards" class="cards"></div>
+    </section>
+    <section id="whitelist" class="panel" hidden>
+      <div class="section-head"><h2>白名单</h2><div class="buttons"><button id="sync" class="secondary">重试同步</button><button id="import" class="secondary">导入现有条目</button></div></div>
+      <form id="add-form" class="form-row"><label for="player">玩家名</label><input id="player" placeholder="例如 Steve" pattern="[A-Za-z0-9_]{3,16}" maxlength="16" required><button type="submit">添加</button></form>
+      <p class="subtle">面板新增条目归属于当前后台管理员。群成员可以在群内添加自己的条目。</p>
+      <div class="table-wrap"><table><thead><tr><th>固定编号</th><th>玩家名</th><th>归属用户</th><th>UUID</th><th>操作</th></tr></thead><tbody id="entries"></tbody></table></div>
+    </section>
+    <section id="audit" class="panel" hidden>
+      <div class="section-head"><h2>操作日志</h2><form id="log-filter" class="form-row"><input id="log-user" placeholder="筛选操作者用户 ID" aria-label="操作者用户 ID"><button type="submit" class="secondary">筛选</button></form></div>
+      <div class="table-wrap"><table><thead><tr><th>时间（北京时间）</th><th>动作</th><th>群号</th><th>用户</th><th>玩家</th><th>详情</th></tr></thead><tbody id="logs"></tbody></table></div>
+      <div class="pagination"><button id="prev" class="secondary">上一页</button><span id="log-page">第 1 页</span><button id="next" class="secondary">下一页</button></div>
+    </section>
+    <section id="settings" class="panel" hidden>
+      <div class="settings-toolbar"><div><h2>配置与菜单</h2><span id="config-state" class="subtle" role="status">尚未加载</span></div><div class="buttons"><button id="reload-config" class="secondary">重新载入</button><button id="save-config">保存并生效</button></div></div>
+      <p class="subtle">添加服务器和群绑定后点击“保存并生效”。配置修改会先保存在本页草稿中，切换页面不会丢失。</p>
+      <nav class="settings-tabs" aria-label="配置分类">
+        <button data-settings-tab="connections" class="active" aria-pressed="true">服务器与群聊</button>
+        <button data-settings-tab="general" aria-pressed="false">常规设置</button>
+        <button data-settings-tab="commands" aria-pressed="false">指令与菜单</button>
+        <button data-settings-tab="messages" aria-pressed="false">回复与广播</button>
+        <button data-settings-tab="spark" aria-pressed="false">spark TPS</button>
+        <button data-settings-tab="advanced" aria-pressed="false">高级 JSON</button>
+      </nav>
+      <div id="settings-connections" class="settings-section">
+        <div class="config-block"><div class="section-head"><div><h3>服务器共同父目录</h3><p class="subtle">先填写所有服务端文件夹所在的目录，再添加各服务器。</p></div></div><div id="root-field"></div></div>
+        <div class="config-block"><div class="section-head"><div><h3>服务器配置</h3><span class="subtle">目录、RCON、UUID 模式与 TPS 数据来源</span></div><button id="add-server">添加服务器</button></div><div id="configured-servers" class="config-list"></div></div>
+        <div class="config-block"><div class="section-head"><div><h3>群与服务器绑定</h3><span class="subtle">选择消息平台，填写群号并勾选服务器</span></div><button id="add-group">添加群聊</button></div><div id="configured-groups" class="config-list"></div></div>
+      </div>
+      <div id="settings-general" class="settings-section" hidden><div class="config-block"><h3>在线探测、同步与重启监控</h3><div id="general-fields" class="field-grid"></div></div></div>
+      <div id="settings-commands" class="settings-section" hidden>
+        <div class="config-block"><h3>指令别名</h3><p class="subtle">多个别名用逗号分隔。例如“添加,add”，主指令不带开头的 /。</p><div id="command-fields" class="field-grid"></div></div>
+        <div class="config-block"><div class="section-head"><h3>帮助菜单</h3><button id="preview-help" class="secondary">预览菜单</button></div><div id="help-field"></div><pre id="help-preview" class="template-preview" hidden></pre></div>
+      </div>
+      <div id="settings-messages" class="settings-section" hidden><div class="config-block"><h3>操作回复与重启广播</h3><p class="subtle">填写你希望发送到群聊的文字。保留 {变量} 可以插入玩家、服务器和操作结果。</p><div id="message-fields" class="message-grid"></div></div></div>
+      <div id="settings-spark" class="settings-section" hidden>
+        <div class="config-block"><div class="section-head"><h3>spark TPS 回复</h3><button id="spark-defaults" class="secondary">使用 spark 默认配置</button></div>
+          <p class="subtle">该按钮会设置所有已配置服务器的查询命令为 spark tps，并恢复默认 TPS 回复。CPU 变量不带 %，Tick 耗时单位是毫秒。</p>
+          <div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div>
+          <details id="tps-variable-details"><summary>查看 spark TPS 变量表</summary><div class="table-wrap"><table><thead><tr><th>占位符</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div><p class="subtle">med 是中位数；P95 是第 95 百分位。{result} 和 {tps_raw} 保留原始响应。</p></details>
+          <div id="spark-message-fields"></div>
+          <details><summary>spark 回复为空时如何采集</summary><p>包内的 companion/astrbot-spark-agent.jar 可通过 Java 启动参数加载，每 2 秒采集一次。TPS 数据来源 auto 会优先读取有效的本地报告；安装步骤在 companion/README.md 中。</p></details>
+        </div>
+      </div>
+      <div id="settings-advanced" class="settings-section" hidden><div class="config-block"><h3>高级 JSON 编辑</h3><p class="subtle">用于批量导入或修改完整配置。编辑后点击“应用到表单”，检查内容后再保存。密码的 __KEEP__ 表示保留原密码。</p><label for="config-editor">完整配置 JSON</label><textarea id="config-editor" spellcheck="false" aria-label="配置 JSON"></textarea><button id="apply-json" class="secondary">应用到表单</button></div></div>
+      <p class="subtle" id="data-directory"></p>
+    </section>
+    <section class="output-panel"><div class="section-head"><h2>操作反馈</h2><span class="subtle">重启结果会广播到对应群聊</span></div><pre id="output">等待操作。</pre></section>
+    <footer>Java 版服务端 · 白名单文件自动备份 · 每个服务器独立 RCON 端口</footer>
+  </main>
+  <dialog id="confirm-dialog"><form method="dialog"><h2>确认操作</h2><p id="confirm-text"></p><div class="buttons"><button value="cancel" class="secondary">取消</button><button value="confirm" class="danger">确认</button></div></form></dialog>
+  <dialog id="edit-dialog"><form id="edit-form"><h2>修改玩家名</h2><label for="edit-player">新玩家名</label><input id="edit-player" pattern="[A-Za-z0-9_]{3,16}" maxlength="16" required><div class="buttons"><button type="button" id="edit-cancel" class="secondary">取消</button><button type="submit">保存</button></div></form></dialog>
+  <dialog id="config-dialog" class="config-dialog"><form id="entity-form">
+    <div class="section-head"><h2 id="entity-title">编辑配置</h2><button type="button" id="entity-close" class="secondary" aria-label="关闭配置编辑">关闭</button></div>
+    <p id="entity-intro" class="subtle"></p><div id="entity-fields" class="field-grid"></div>
+    <p id="entity-error" class="form-error" role="alert" hidden></p>
+    <div class="buttons"><button type="button" id="entity-cancel" class="secondary">取消</button><button type="submit" id="entity-apply">加入配置草稿</button></div>
+  </form></dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
