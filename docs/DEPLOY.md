@@ -48,7 +48,7 @@ $env:MC_RCON_2 = '你的 server2 RCON 密码'
 
 ## 3. 安装与填写配置
 
-安装 `astrbot_plugin_mc_manager-1.0.0.zip` 后，在 AstrBot 插件配置页逐项填写。完整示例是根目录 `config.example.json`，可复制到管理面板的配置编辑器后按实际值修改。
+安装 `astrbot_plugin_mc_manager-1.0.1.zip` 后，在 AstrBot 插件配置页逐项填写。完整示例是根目录 `config.example.json`，可复制到管理面板的配置编辑器后按实际值修改。
 
 群配置示例：
 

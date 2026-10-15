@@ -33,7 +33,7 @@ MC 服务端共同父目录
 
 ## 安装
 
-1. 使用 `dist/astrbot_plugin_mc_manager-1.0.0.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
+1. 使用 `dist/astrbot_plugin_mc_manager-1.0.1.zip`，通过 AstrBot 插件管理中的本地上传安装；也可以把代码放到 `data/plugins/astrbot_plugin_mc_manager/`。
 2. 在各服务端开启 RCON 和白名单，给每台服务端分配独立的 RCON 端口。
 3. 打开插件配置，填写共同父目录、服务器配置、群配置。可参考 [config.example.json](config.example.json)。
 4. 重载插件，在绑定的群内发送 `/mc`，记录本群主动广播的会话。
@@ -156,9 +156,10 @@ TPS 的服务端命令在每台服务器的 `tps_command` 中单独设置。Pape
 python -m unittest discover -s tests -v
 python -m compileall -q main.py mc_manager
 node --check pages/console/app.js
+python -m pip install -r requirements-dev.txt
 python tools/build_release.py
 ```
 
-测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。本次验证共 60 项自动测试全部通过，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
+测试覆盖群隔离、归属限制、管理员权限、稳定编号、持久化、日志、初始合并、文件损坏、离线同步、重启成功/失败/超时、消息重试，以及真实 TCP 上的 RCON 认证、拆包、多包 UTF-8 和连接断开。原有 60 项功能测试全部通过，v1.0.1 额外通过 6 项安装包回归测试，管理页面还做了桌面/手机尺寸的浏览器检查；详情与截图见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 
 调研依据和适用边界见 [docs/RESEARCH.md](docs/RESEARCH.md)。本工作区没有正在运行的 AstrBot 实例和真实 Minecraft 服务端，因此上线前需要按部署文档完成实际环境联调。

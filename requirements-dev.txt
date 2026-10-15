@@ -1,0 +1,2 @@
+# Development and release packaging only; AstrBot already provides PyYAML at runtime.
+PyYAML>=6.0,<7
