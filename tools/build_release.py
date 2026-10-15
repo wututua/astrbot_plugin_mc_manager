@@ -16,6 +16,7 @@ FILES = (
     "_conf_schema.json",
     "requirements.txt",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "logo.png",
     "config.example.json",
@@ -56,6 +57,10 @@ def build(output_directory: Path | None = None) -> Path:
         raise ValueError("core version differs from metadata.yaml")
     if (ROOT / "pages/console/logo.png").read_bytes() != (ROOT / "logo.png").read_bytes():
         raise ValueError("The management page logo must match the plugin logo.png")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    changelog_entries = re.findall(r"(?ms)^## (v\d+\.\d+\.\d+)\s*\n(.*?)(?=^## |\Z)", changelog)
+    if not changelog_entries or changelog_entries[0][0] != f"v{version}" or not changelog_entries[0][1].strip():
+        raise ValueError("CHANGELOG.md must start with nonempty release notes for the current plugin version")
     output_dir = Path(output_directory) if output_directory is not None else ROOT / "dist"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{metadata['name']}-{version}.zip"
@@ -79,6 +84,7 @@ def build(output_directory: Path | None = None) -> Path:
             "main.py",
             "metadata.yaml",
             "LICENSE",
+            "CHANGELOG.md",
             "logo.png",
             "_conf_schema.json",
             "pages/console/index.html",

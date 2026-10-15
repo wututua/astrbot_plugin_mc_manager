@@ -176,6 +176,19 @@ def discover_official_pages(plugin_root: Path):
     return asyncio.run(instance.discover_plugin_pages(metadata))
 
 
+def read_official_changelog(plugin_root: Path):
+    source = RELEASE_ROOT / "dashboard" / "services" / "plugin_service.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    method = next(
+        node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "get_plugin_changelog"
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[copy.deepcopy(method)], type_ignores=[]))
+    namespace = {"logger": logging.getLogger(__name__), "PluginServiceError": ValueError}
+    exec(compile(module, str(source), "exec"), namespace)
+    service = types.SimpleNamespace(resolve_plugin_dir=lambda name: plugin_root)
+    return namespace["get_plugin_changelog"](service, "astrbot_plugin_mc_manager")
+
+
 class ReleaseTests(unittest.TestCase):
     def metadata(self):
         return yaml.safe_load((ROOT / "metadata.yaml").read_text(encoding="utf-8"))
@@ -213,6 +226,7 @@ class ReleaseTests(unittest.TestCase):
                 for name in (
                     "main.py",
                     "LICENSE",
+                    "CHANGELOG.md",
                     "logo.png",
                     "_conf_schema.json",
                     "mc_manager/service.py",
@@ -231,6 +245,23 @@ class ReleaseTests(unittest.TestCase):
                         archive.read("astrbot_plugin_mc_manager/pages/console/" + filename),
                         archive.read("astrbot_plugin_mc_manager/views/console/" + filename),
                     )
+
+    @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
+    def test_official_changelog_reads_repository_and_installed_package(self):
+        expected = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn("## " + self.metadata()["version"], expected)
+        content, message = read_official_changelog(ROOT)
+        self.assertEqual(content["content"], expected)
+        self.assertEqual(message, "成功获取更新日志")
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            archive = build(directory / "archive")
+            installed = directory / "installed"
+            inspector = official_archive_inspector(directory)
+            getattr(inspector(), EXTRACT_METHOD)(str(archive), str(installed))
+            content, message = read_official_changelog(installed)
+            self.assertEqual(content["content"], expected)
+            self.assertEqual(message, "成功获取更新日志")
 
     @unittest.skipUnless(HAS_OFFICIAL, "requires researched AstrBot release source")
     def test_official_inspector_reproduces_missing_desc_error(self):

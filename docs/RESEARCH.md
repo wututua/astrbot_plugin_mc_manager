@@ -1,6 +1,6 @@
 # 实现依据与设计取舍
 
-本文描述 v1.4.0 的当前实现。旧版兼容范围和修复过程见[更新日志](CHANGELOG.md)，当前支持范围见[接口适配说明](ASTRBOT_COMPATIBILITY.md)。
+本文描述 v1.4.0 的当前实现。旧版兼容范围和修复过程见[更新日志](../CHANGELOG.md)，当前支持范围见[接口适配说明](ASTRBOT_COMPATIBILITY.md)。
 
 ## 主要资料
 

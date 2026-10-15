@@ -7,6 +7,7 @@
 | 接口 | 当前使用方式 |
 | --- | --- |
 | 插件元数据 | `metadata.yaml` 的必填字段、`astrbot_version` 与 `repo` |
+| 更新日志 | 插件根目录 `CHANGELOG.md`，由插件详情的日志接口读取；GitHub Release 正文另行填写 |
 | 基类与日志 | `Star(context, config)`、`self.logger` |
 | 生命周期 | `initialize` 注册网页 API 并启动后台任务；`terminate` 等待任务结束并清理本实例路由 |
 | 原生命令 | `filter.command("mc")` 注册，前置 `CustomFilter` 匹配完整主指令与自定义别名 |

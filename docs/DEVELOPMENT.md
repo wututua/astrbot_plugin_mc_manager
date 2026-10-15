@@ -8,6 +8,7 @@
 astrbot_plugin_mc_manager/
 ├── main.py                   # AstrBot 事件、网页 API、配置与生命周期
 ├── metadata.yaml             # 插件名称、版本、框架要求与仓库地址
+├── CHANGELOG.md              # AstrBot 直接读取的更新日志
 ├── _conf_schema.json         # AstrBot 配置表单
 ├── mc_manager/               # 白名单、持久化、RCON、spark 与业务逻辑
 ├── pages/console/            # 网页源码，构建包额外生成同内容的 views/
@@ -98,16 +99,18 @@ node tools/test_ui.cjs
 python tools/build_release.py
 ```
 
-输出为 `dist/astrbot_plugin_mc_manager-<版本号>.zip`。构建会验证元数据、`pyproject.toml` 和 `mc_manager.__version__` 一致，包含 LICENSE、图标、网页、配置、文档及采集器；从一套网页源码生成相同的 `pages/` 与 `views/`，并检查页面本地 `logo.png` 与根目录 Logo 字节一致，不包含测试、调研依赖、数据库或缓存。
+输出为 `dist/astrbot_plugin_mc_manager-<版本号>.zip`。构建会验证元数据、`pyproject.toml` 和 `mc_manager.__version__` 一致，包含根目录 CHANGELOG.md、LICENSE、图标、网页、配置、文档及采集器；从一套网页源码生成相同的 `pages/` 与 `views/`，并检查页面本地 `logo.png` 与根目录 Logo 字节一致，不包含测试、调研依赖、数据库或缓存。
 
 如变更 agent 源码，先重编译 JAR，再构建插件 ZIP。直接从 GitHub 仓库安装时，AstrBot 使用源码中的 `pages/`；4.29 的页面发现同样保留该回退目录。
 
 ## 提交与发布
 
 1. 更新 `metadata.yaml`、`pyproject.toml`、`mc_manager/__init__.py` 中的版本，并同步安装包测试的版本预期。
-2. 更新 [CHANGELOG.md](CHANGELOG.md)、README 和本次验证记录，注明测试跳过项与实际部署边界。
+2. 在根目录 [CHANGELOG.md](../CHANGELOG.md) 顶部填写本版本的具体更新、修复和必要的升级说明，并同步 README 和验证记录。AstrBot 的“更新日志”读取插件根目录文件，不能只更新 `docs/` 或 GitHub Release 正文。构建会检查最新日志版本与元数据一致。
 3. 运行适当的核心、框架、agent、页面和安装包检查。
 4. 使用本仓库地址配置 AstrBot 的仓库安装或更新。
-5. 如创建 GitHub Release，可附构建的插件 ZIP、采集器 JAR 及校验值；不要用 GitHub 自动生成的源码 ZIP 替代已验证安装包。
+5. 只有在用户明确要求发布时才创建版本标签和 GitHub Release。Release 标题仅填写版本号，例如 `v1.4.0`；正文填写对应版本的更新内容、升级方法与验证结果。
+6. 发布附件为插件 ZIP、采集器 JAR、启动示例和 `SHA256SUMS.txt`；不单独上传 LICENSE 或恢复清单。安装包包含根目录 `CHANGELOG.md` 与许可证。
+7. 发布后核对 Release 正文、附件校验值及根目录日志；使用 AstrBot 正式版本的日志读取方法检查安装后的“更新日志”返回本次内容。已有旧安装包的用户需要更新或重新导入后才能读取新增文件。
 
 仓库地址：`https://github.com/wututua/astrbot_plugin_mc_manager`。许可证为仓库根目录的 [MIT License](../LICENSE)；代码和文档一起提交，第三方依赖保持其自身许可证。

@@ -10,7 +10,7 @@ AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器�
 
 **AstrBot `>=4.28.0,<5` · Python `3.12+`**
 
-[下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](docs/CHANGELOG.md)
+[下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](CHANGELOG.md)
 
 ## 主要功能
 
@@ -96,7 +96,7 @@ AstrBot 需要能够读写各服的 `whitelist.json` 并连接 RCON。同机各�
 
 - **TPS**：在“配置与菜单 → TPS 设置”按服选择原生或 spark 模式并自定义指令。原生模式完整返回命令回复；仅 spark 支持变量模板，RCON 回复为空时可使用[Java 采集器](companion/README.md)。
 - **重启**：插件只发送 `stop`，Java 进程重新启动由你的脚本或进程管理器负责。每个需要接收广播的群先发送一次 `/mc`。
-- **同步与升级**：接管后以数据库条目为同步依据，手工改文件可能被覆盖。更新时保留原配置和插件数据目录；每次改写白名单前会保留文件备份。
+- **同步与升级**：接管后以数据库条目为同步依据，手工改文件可能被覆盖。更新时保留原配置和插件数据目录；每次改写白名单前会保留文件备份。更新内容可在插件详情的“更新日志”中查看。
 
 ## 详细文档
 
@@ -107,7 +107,7 @@ AstrBot 需要能够读写各服的 `whitelist.json` 并连接 RCON。同机各�
 | [TPS 变量](docs/TPS_VARIABLES.md) / [Java 采集器](companion/README.md) | 性能指标、自定义输出与启动参数 |
 | [开发指南](docs/DEVELOPMENT.md) | 测试、构建与开发环境 |
 | [接口适配](docs/ASTRBOT_COMPATIBILITY.md) / [验证记录](docs/VALIDATION.md) | 支持范围与测试边界 |
-| [更新日志](docs/CHANGELOG.md) / [实现依据](docs/RESEARCH.md) | 版本变化与设计说明 |
+| [更新日志](CHANGELOG.md) / [实现依据](docs/RESEARCH.md) | 版本变化与设计说明 |
 
 配置参考：[默认配置](config.default.json) · [多群共享示例](config.example.json)。
 
