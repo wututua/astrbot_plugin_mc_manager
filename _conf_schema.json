@@ -102,24 +102,25 @@
             "description": "群配置唯一 ID",
             "type": "string",
             "default": "group1",
-            "hint": "有历史数据后请保持 ID 与群绑定不变。"
+            "hint": "用于关联本配置组的白名单与日志，保存后保持固定；QQ群号和平台实例可在网页中修改。"
           },
           "platform_id": {
             "description": "AstrBot 平台实例 ID",
             "type": "string",
             "default": "",
-            "hint": "从消息平台配置复制实例 ID，不能填写 aiocqhttp 这样的适配器类型名称。"
+            "hint": "从消息平台选择实例 ID，或填写 /sid 的 Bot ID；更换平台时原用户归属会清空，条目由管理员管理。"
           },
           "group_id": {
             "description": "群号 / 群 ID",
             "type": "string",
-            "default": ""
+            "default": "",
+            "hint": "实际QQ群号或其他平台的群 ID；修改后保留本配置组白名单，旧广播会话重置。"
           },
           "server_ids": {
             "description": "本群服务器 ID",
             "type": "list",
             "default": [],
-            "hint": "如 [\"server1\", \"server2\", \"server3\"]；一个服务器只能属于一个群。"
+            "hint": "勾选本群服务器；删除群绑定并保存后释放服务器。转给另一配置组时按新组同步，不自动继承旧组成员。"
           },
           "admin_ids": {
             "description": "本群插件管理员用户 ID",

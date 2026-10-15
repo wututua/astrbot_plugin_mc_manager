@@ -298,7 +298,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("group_id", data["schema"]["groups"]["templates"]["group"]["items"])
         self.assertIn("rcon_password", data["schema"]["servers"]["templates"]["server"]["items"])
         self.assertTrue(data["revision"])
-        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100"}])
+        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100", "active": 1}])
         self.assertEqual(data["bindings"]["servers"], [{"server": "server1", "scope": "g1"}])
         self.assertNotIn("private-platform-token", response.body.decode())
         self.assertNotIn("private-secret", response.body.decode())
@@ -378,16 +378,27 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(self.plugin.service, current)
                 self.assertFalse(current.closed)
 
-    async def test_web_form_cannot_reassign_persisted_group_identity(self):
+    async def test_web_form_can_change_group_number_and_resets_old_broadcast(self):
+        self.plugin.service.store.remember("g1", "bot:GroupMessage:100")
         raw = json.loads(json.dumps(dict(self.plugin.config)))
-        raw["groups"][0]["group_id"] = "different-group"
-        current = self.plugin.service
-        with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
-            response = await self.plugin.page_save_config()
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("不能改绑", json.loads(response.body)["message"])
-        self.assertIs(self.plugin.service, current)
-        self.assertEqual(self.plugin.settings.groups["g1"].group_id, "100")
+        raw["groups"][0]["group_id"] = "200"
+        raw["groups"][0]["broadcast_origin"] = "bot:GroupMessage:100"
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+                response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(self.plugin.settings.groups["g1"].group_id, "200")
+        self.assertEqual(self.plugin.config["groups"][0]["broadcast_origin"], "")
+        self.assertEqual(self.plugin.service.store.origin("g1"), "")
+        logs, _ = self.plugin.service.store.logs("g1", 1, 100)
+        changed = next(row for row in logs if row["action"] == "change_group")
+        self.assertEqual(changed["user"], "dashboard:admin")
+        self.assertIn("100", changed["detail"])
+        self.assertIn("200", changed["detail"])
 
     async def test_web_routes_are_registered_after_initialization_and_preserve_other_plugins(self):
         def another_handler():
@@ -481,7 +492,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("platform_id", data["config_error"])
         self.assertEqual(data["config"]["servers"][0]["rcon_password"], "__KEEP__")
         self.assertEqual(data["config"]["groups"][0]["platform_id"], "")
-        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100"}])
+        self.assertEqual(data["bindings"]["groups"], [{"id": "g1", "platform": "bot", "group_id": "100", "active": 1}])
         self.assertNotIn("private-secret", response.body.decode())
         self.assertIn("groups", data["schema"])
 
@@ -544,12 +555,20 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.plugin.service)
         self.assertEqual(self.plugin._config_bindings()["groups"][0]["group_id"], "100")
 
-    async def test_history_conflict_also_enters_repair_mode_without_rebinding(self):
+    async def test_valid_native_group_number_change_loads_as_current_binding(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))
         raw["groups"][0]["group_id"] = "200"
-        await self.recovery_plugin(raw)
-        self.assertIn("不能改绑", self.plugin.config_error)
-        self.assertEqual(self.plugin._config_bindings()["groups"][0]["group_id"], "100")
+        await self.plugin.terminate()
+        self.plugin = self.main.MCManagerPlugin(self.context, self.Config(raw))
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            await self.plugin.initialize()
+        self.assertEqual(self.plugin.config_error, "")
+        self.assertIsNotNone(self.plugin.service)
+        self.assertEqual(self.plugin._config_bindings()["groups"][0]["group_id"], "200")
 
     async def test_malformed_server_structure_can_be_read_and_fixed_in_repair_mode(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))
@@ -573,3 +592,73 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         with self.bound_request(username=None):
             response = await self.plugin.page_snapshot()
         self.assertEqual(response.status_code, 400)
+
+    async def save_with_fake_rcon(self, raw):
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+                return await self.plugin.page_save_config()
+
+    async def test_removed_group_releases_server_in_config_api_and_keeps_archive(self):
+        actor = self.main.Actor("bot", "100", "member", origin="bot:GroupMessage:100")
+        await self.plugin.service.execute(actor, "add", ["Steve"])
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"] = []
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200, response.body)
+        with self.bound_request():
+            data = json.loads((await self.plugin.page_config()).body)
+        self.assertEqual(data["bindings"]["servers"], [])
+        self.assertEqual(data["bindings"]["groups"][0]["active"], 0)
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["name"], "Steve")
+        self.assertEqual(self.plugin.service.store.origin("g1"), "")
+
+    async def test_released_server_can_bind_new_group_through_config_save(self):
+        await self.plugin.service.execute(self.main.Actor("bot", "100", "member"), "add", ["Steve"])
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"] = []
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200)
+        raw["groups"] = [{"id": "g2", "platform_id": "bot", "group_id": "200", "server_ids": ["server1"]}]
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200, response.body)
+        await self.plugin.service.pause()
+        await self.plugin.service.sync_group(self.plugin.settings.groups["g2"])
+        self.assertEqual(self.plugin.service.store.entries("g2"), [])
+        self.assertEqual(json.loads((self.root / "server1/whitelist.json").read_text(encoding="utf-8")), [])
+        self.assertEqual(self.plugin._config_bindings()["servers"], [{"server": "server1", "scope": "g2"}])
+        self.assertEqual(self.plugin.service.store.entries("g1")[0]["name"], "Steve")
+
+    async def test_rebinding_database_error_rolls_back_config_and_resumes_original_service(self):
+        original = self.plugin.service
+        original.store.remember("g1", "bot:GroupMessage:100")
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["group_id"] = "200"
+        store_type = type(original.store)
+        with patch.object(store_type, "audit", side_effect=RuntimeError("binding audit unavailable")):
+            response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 400)
+        self.assertIs(self.plugin.service, original)
+        self.assertFalse(original.closed)
+        self.assertIsNotNone(original.background)
+        self.assertEqual(self.plugin.config["groups"][0]["group_id"], "100")
+        self.assertEqual(original.store.origin("g1"), "bot:GroupMessage:100")
+        self.assertEqual(original.store.db.execute("SELECT group_id FROM scopes WHERE id='g1'").fetchone()[0], "100")
+
+    async def test_deleting_all_groups_cleans_up_legacy_sticky_bindings_on_load(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"] = []
+        await self.plugin.terminate()
+        self.plugin = self.main.MCManagerPlugin(self.context, self.Config(raw))
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            await self.plugin.initialize()
+        self.assertEqual(self.plugin.config_error, "")
+        self.assertEqual(self.plugin._config_bindings()["servers"], [])
+        self.assertEqual(self.plugin._config_bindings()["groups"][0]["active"], 0)

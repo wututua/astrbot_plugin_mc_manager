@@ -53,7 +53,43 @@ class Service:
                 error = "插件监控曾中断，无法确认重启结果；请查询服务器状态。"
                 text = self.settings.render("restart_failed", server=name, error=error)
                 self.store.finish_job(job["server"], "interrupted", error, job["origin"], text)
-        self.background = asyncio.create_task(self._loop(), name="mc-sync-and-notify")
+        self.resume()
+
+    def resume(self):
+        if not self.closed and (self.background is None or self.background.done()):
+            self.background = asyncio.create_task(self._loop(), name="mc-sync-and-notify")
+
+    async def pause(self):
+        task = self.background
+        if task is not None:
+            task.cancel()
+            completion = asyncio.gather(task, return_exceptions=True)
+            try:
+                await asyncio.shield(completion)
+            except asyncio.CancelledError:
+                await completion
+                self.background = None
+                raise
+            self.background = None
+        for lock in self.locks.values():
+            async with lock:
+                pass
+
+    def broadcast_origin(self, group: Group, actor: Actor) -> str:
+        if actor.origin:
+            return actor.origin
+        recorded = self.store.origin(group.id)
+        if recorded:
+            return recorded
+        parts = group.origin.split(":", 2)
+        if (
+            len(parts) == 3
+            and parts[0] == group.platform
+            and parts[1] == "GroupMessage"
+            and (parts[2] == group.group_id or parts[2].endswith("_" + group.group_id))
+        ):
+            return group.origin
+        return ""
 
     async def _loop(self):
         while True:
@@ -216,7 +252,7 @@ class Service:
 
     def allowed_entry(self, actor: Actor, group: Group, target: str) -> dict:
         row = self.store.find(group.id, target)
-        if row["owner"] != actor.user and not self.settings.is_admin(actor, group):
+        if (not row["owner"] or row["owner"] != actor.user) and not self.settings.is_admin(actor, group):
             raise MCError("只能修改或移除自己的白名单；历史导入条目需管理员处理。")
         return row
 
@@ -275,7 +311,7 @@ class Service:
             targets = self.targets(group, args[0])
             if any(s in self.restart_tasks for s in targets):
                 raise MCError("目标服务器已有重启任务，请等待当前任务结束。")
-            origin = actor.origin or group.origin or self.store.origin(group.id)
+            origin = self.broadcast_origin(group, actor)
             if not origin:
                 raise MCError("尚无本群广播会话；请先在群内使用 MC 指令，或配置 broadcast_origin。")
             async with self.locks[group.id]:
@@ -475,6 +511,9 @@ class Service:
     async def deliver(self):
         async with self.delivery_lock:
             for item in self.store.outbox():
+                if item.get("scope", "") not in self.settings.groups:
+                    self.store.delivered(item["id"], True)
+                    continue
                 try:
                     async with asyncio.timeout(15):
                         success = await self.send(item["origin"], item["text"])
@@ -494,7 +533,7 @@ class Service:
                     "group_id": g.group_id,
                     "server_ids": list(g.servers),
                     "entries": len(self.store.entries(g.id)),
-                    "broadcast_ready": bool(g.origin or self.store.origin(g.id)),
+                    "broadcast_ready": bool(self.broadcast_origin(g, Actor("", "", ""))),
                 }
                 for g in self.settings.groups.values()
             ],

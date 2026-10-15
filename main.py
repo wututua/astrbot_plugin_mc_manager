@@ -225,7 +225,7 @@ class MCManagerPlugin(Star):
         store = self.service.store if self.service is not None else Store(self.data_dir)
         try:
             return {
-                "groups": [dict(row) for row in store.db.execute("SELECT id,platform,group_id FROM scopes")],
+                "groups": [dict(row) for row in store.db.execute("SELECT id,platform,group_id,active FROM scopes")],
                 "servers": [dict(row) for row in store.db.execute("SELECT server,scope FROM bindings")],
             }
         finally:
@@ -301,18 +301,30 @@ class MCManagerPlugin(Star):
                         if sid not in old_servers:
                             raise MCError("新服务器需要填写密码或密码环境变量。")
                         server["rcon_password"] = old_servers[sid].get("rcon_password", "")
+                histories = {row["id"]: row for row in self._config_bindings()["groups"]}
+                for group in raw.get("groups", []):
+                    old = histories.get(group["id"])
+                    if old and (old["platform"], old["group_id"]) != (group["platform_id"], group["group_id"]):
+                        group["broadcast_origin"] = ""
                 settings = Settings(raw)
                 candidate = Service(settings, self.data_dir, self._send, reserve_scopes=False)
                 old_config = copy.deepcopy(dict(self.config))
+                paused = False
                 try:
                     self.config.clear()
                     self.config.update(raw)
                     await self._persist_config()
-                    candidate.store.validate_scopes(settings)
+                    if current is not None:
+                        paused = True
+                        await current.pause()
+                    operator = Actor("", "", "dashboard:" + request.username, request.username, True)
+                    candidate.store.validate_scopes(settings, actor=operator)
                 except BaseException:
                     self.config.clear()
                     self.config.update(old_config)
                     candidate.store.close()
+                    if paused and current is not None:
+                        current.resume()
                     try:
                         await self._persist_config()
                     except Exception:

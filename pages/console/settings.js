@@ -221,17 +221,16 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     const choices = [];
     for (const server of draft.servers) {
       const selectedGroup = draft.groups.find((g, index) => index !== (entity?.kind === 'group' ? entity.index : -1) && g.server_ids.includes(server.id));
-      const history = bindings.servers.find(b => b.server === server.id && b.scope !== group.id);
-      const locked = selectedGroup || history;
+      const locked = selectedGroup;
       const label = el('label', undefined, 'server-choice');
       const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.value = server.id;
       checkbox.checked = group.server_ids.includes(server.id);
       checkbox.disabled = Boolean(locked);
       const name = el('span', `${server.name}（${server.id}）`);
-      if (locked) name.append(el('small', `归属 ${selectedGroup ? selectedGroup.id || "未命名群" : history.scope}`, 'field-hint'));
+      if (locked) name.append(el('small', `归属 ${selectedGroup.id || "未命名群"}`, 'field-hint'));
       label.append(checkbox, name); wrapper.append(label); choices.push(checkbox);
     }
-    wrapper.append(el('p', '每台服务器只归属一个群；同一群下的 UUID 模式必须一致。', 'field-hint'));
+    wrapper.append(el('p', '服务器转给其他配置组后会同步新组白名单，旧组成员不会自动导入。每台服务器只归属一个群；同一群下的 UUID 模式必须一致。删除群绑定后，这些服务器可在草稿中重新选择；保存后生效。', 'field-hint'));
     return { wrapper, read: () => choices.filter(c => c.checked && !c.disabled).map(c => c.value) };
   }
   function openEntity(kind, index = -1) {
@@ -252,23 +251,23 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     const container = $('entity-fields'); container.replaceChildren();
     $('entity-error').hidden = true;
     $('entity-title').textContent = `${index < 0 ? '添加' : '编辑'}${kind === 'server' ? '服务器' : '群聊'}`;
-    $('entity-intro').textContent = kind === 'server' ? '目录填写相对于共同父目录的文件夹。密码留空可保留已保存的密码。' : '选择消息平台，填写群号和管理员账号，再勾选允许本群操作的服务器。';
+    $('entity-intro').textContent = kind === 'server' ? '目录填写相对于共同父目录的文件夹。密码留空可保留已保存的密码。' : '选择消息平台，填写群号和管理员账号，再勾选服务器。修改群号会保留本配置组的白名单，重置广播会话；跨平台修改会清空用户归属，由管理员管理。';
     const persisted = kind === 'group' ? bindings.groups.find(g => g.id === row.id) : index >= 0 && JSON.parse(saved).servers.some(s => s.id === row.id);
     if (kind === 'group' && persisted) {
-      row.platform_id = persisted.platform;
-      row.group_id = persisted.group_id;
+      if (!row.platform_id) row.platform_id = persisted.platform;
+      if (!row.group_id) row.group_id = persisted.group_id;
     }
     for (const [key, item] of Object.entries(items)) {
       if (kind === 'group' && key === 'server_ids') {
         const choices = serverChoices(row); fields.set(key, choices); container.append(choices.wrapper); continue;
       }
-      const locked = Boolean(persisted) && (key === 'id' || kind === 'group' && ['platform_id', 'group_id'].includes(key));
+      const locked = Boolean(persisted) && key === 'id' ;
       const descriptor = copy(item);
       if (kind === 'group' && key === 'platform_id' && platforms.length && !locked) {
         descriptor.options = [...new Set([row.platform_id, ...platforms.map(p => p.id)].filter(Boolean))];
       }
       const entry = field(key, descriptor, row[key], { id: 'entity-' + key, readonly: locked, required: entityRequired.has(key), passwordKept: key === 'rcon_password' && row[key] === '__KEEP__' });
-      if (locked) entry.wrapper.append(el('span', '已保存的身份绑定保持固定；要添加其他群或服务器，请使用新的配置 ID。', 'field-hint'));
+      if (locked) entry.wrapper.append(el('span', '配置 ID 用于关联白名单和日志，保持固定；群号与消息平台可以修改。', 'field-hint'));
       if (kind === 'group' && key === 'platform_id' && descriptor.options) {
         for (const option of entry.control.options) {
           const platform = platforms.find(p => p.id === option.value);
@@ -308,7 +307,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
       if (candidate.rcon_password === '__KEEP__' && index < 0) throw new Error('新服务器需要实际密码或密码环境变量。');
     } else {
       const previous = bindings.groups.find(g => g.id === candidate.id);
-      if (previous && (previous.platform !== candidate.platform_id || previous.group_id !== candidate.group_id)) throw new Error('此配置 ID 已有其他群的历史，请使用新的群配置 ID。');
+      if (previous && (previous.platform !== candidate.platform_id || previous.group_id !== candidate.group_id)) candidate.broadcast_origin = '';
       if (!candidate.server_ids.length) throw new Error('至少勾选一台属于本群的服务器。');
       if (rows.some((row, i) => i !== index && row.platform_id === candidate.platform_id && row.group_id === candidate.group_id)) throw new Error('该平台中的群号已经绑定。');
       const servers = draft.servers.filter(server => candidate.server_ids.includes(server.id));
@@ -338,7 +337,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
         const group = draft.groups.find(g => g.server_ids.includes(row.id));
         if (group) throw new Error(`服务器仍绑定群 ${group.group_id}，请先编辑或移除该群绑定。`);
       }
-      const prompt = kind === 'server' ? `从配置中移除 ${row.name}（${row.id}）？服务端文件和历史数据会保留。` : `移除群 ${row.group_id} 的绑定？历史白名单、归属和日志会保留，保存后此群将停止使用 MC 功能。`;
+      const prompt = kind === 'server' ? `从配置中移除 ${row.name}（${row.id}）？服务端文件和历史数据会保留。` : `移除群 ${row.group_id} 的绑定？服务器会释放，可重新绑定；历史白名单、归属和日志会保留。保存后此群将停止使用 MC 功能。`;
       if (!await confirmAction(prompt)) return;
       rows.splice(index, 1); touch(); renderEntities();
       notice('已修改配置草稿，点击“保存并生效”应用。');

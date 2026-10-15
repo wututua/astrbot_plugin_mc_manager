@@ -331,18 +331,38 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("重启成功", self.sent[0][1])
         self.assertEqual(self.service.store.jobs()[0]["status"], "interrupted")
 
-    async def test_scope_id_cannot_be_reused_by_different_group(self):
+    async def test_group_number_can_change_with_entries_preserved_and_session_reset(self):
+        await self.execute("add", ["Steve"])
+        before = self.service.store.entries("g1")
         raw = copy.deepcopy(self.raw)
         raw["groups"][0]["group_id"] = "300"
-        with self.assertRaisesRegex(MCError, "不能改绑"):
-            self.service.store.validate_scopes(Settings(raw))
+        updated = Settings(raw)
+        self.service.store.validate_scopes(updated)
+        self.assertEqual(self.service.store.entries("g1"), before)
+        self.assertEqual(self.service.store.origin("g1"), "")
+        row = self.service.store.db.execute("SELECT group_id FROM scopes WHERE id='g1'").fetchone()
+        self.assertEqual(row[0], "300")
+        with self.assertRaisesRegex(MCError, "未绑定"):
+            updated.group_for(self.user)
+        self.assertEqual(updated.group_for(Actor("bot", "300", "user1")).id, "g1")
 
-    async def test_server_cannot_be_moved_to_another_scope(self):
+    async def test_server_can_move_to_another_group_without_importing_old_members(self):
+        await self.execute("add", ["Steve"])
         raw = copy.deepcopy(self.raw)
         raw["groups"][0]["server_ids"] = ["s1"]
         raw["groups"][1]["server_ids"] = ["s2", "s3"]
-        with self.assertRaisesRegex(MCError, "跨群"):
-            self.service.store.validate_scopes(Settings(raw))
+        updated = Settings(raw)
+        self.service.store.validate_scopes(updated)
+        self.service.settings = updated
+        await self.service.ensure_group(updated.groups["g2"])
+        await self.service.sync_group(updated.groups["g2"])
+        self.assertEqual(self.file_names("s2"), [])
+        self.assertEqual(self.file_names("s1"), ["Steve"])
+        self.assertEqual(self.service.store.entries("g1")[0]["name"], "Steve")
+        self.assertEqual(self.service.store.entries("g2"), [])
+        self.assertEqual(
+            self.service.store.db.execute("SELECT scope FROM bindings WHERE server='s2'").fetchone()[0], "g2"
+        )
 
     async def test_backups_and_atomic_writes(self):
         await self.execute("add", ["Steve"])

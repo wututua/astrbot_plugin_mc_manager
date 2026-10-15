@@ -76,10 +76,13 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
           if (body.revision !== revision) throw new Error('配置版本冲突');
           config = clone(body.config); configError = ''; sessionStorage.removeItem('mc-test-recovery');
           for (const server of config.servers) if (server.rcon_password) server.rcon_password = '__KEEP__';
+          for (const archived of bindings.groups) archived.active = 0;
           for (const group of config.groups) {
-            if (!bindings.groups.some(g => g.id === group.id)) bindings.groups.push({ id: group.id, platform: group.platform_id, group_id: group.group_id });
-            for (const id of group.server_ids) if (!bindings.servers.some(s => s.server === id)) bindings.servers.push({ server: id, scope: group.id });
+            const saved = bindings.groups.find(g => g.id === group.id);
+            if (saved) Object.assign(saved, { platform: group.platform_id, group_id: group.group_id, active: 1 });
+            else bindings.groups.push({ id: group.id, platform: group.platform_id, group_id: group.group_id, active: 1 });
           }
+          bindings.servers = config.groups.flatMap(group => group.server_ids.map(server => ({ server, scope: group.id })));
           revision = 'revision-' + (Number(revision.split('-')[1]) + 1);
           window.latestConfig = clone(config);
           return { message: '配置已保存并立即生效。' };
@@ -198,10 +201,18 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
     assert.equal(await page.locator('#config-state').textContent(), '配置已保存');
     await clickTab('connections');
     await page.locator('#configured-groups [data-id="group1"] button').filter({ hasText: '编辑群聊' }).click();
-    for (const id of ['entity-id', 'entity-group_id', 'entity-platform_id']) assert.equal(await page.locator('#' + id).getAttribute('readonly'), '');
+    assert.equal(await page.locator('#entity-id').getAttribute('readonly'), '');
+    assert.equal(await page.locator('#entity-group_id').isEditable(), true);
+    assert.equal(await page.locator('#entity-platform_id').isEnabled(), true);
     assert.equal(await page.locator('#entity-fields input[value="server1"]').isDisabled(), false);
     assert.equal(await page.locator('#entity-fields input[value="server4"]').isDisabled(), true);
-    await page.locator('#entity-cancel').click();
+    await page.locator('#entity-group_id').fill('222222222');
+    await page.locator('#entity-apply').click();
+    assert.match(await page.locator('#entity-error').textContent(), /已经绑定/);
+    await page.locator('#entity-group_id').fill('111111112');
+    await page.locator('#entity-apply').click();
+    await save();
+    assert.equal(await page.evaluate(() => window.latestConfig.groups.find(g => g.id === 'group1').group_id), '111111112');
 
     await clickTab('spark');
     assert.equal(await page.locator('#tps-variables tr').count(), 27);
@@ -244,6 +255,16 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
     await page.locator('#configured-servers [data-id="server6"] button').filter({ hasText: '移除服务器' }).click();
     assert.match(await page.locator('#notice').textContent(), /仍绑定/);
     await page.locator('#configured-groups [data-id="group3"] button').filter({ hasText: '移除群绑定' }).click();
+    await page.locator('#confirm-dialog button[value="confirm"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#configured-groups article').length === 2);
+    await page.locator('#add-group').click();
+    assert.equal(await page.locator('#entity-id').inputValue(), 'group4');
+    await page.locator('#entity-group_id').fill('444444444');
+    assert.equal(await page.locator('#entity-fields input[value="server6"]').isDisabled(), false);
+    await page.locator('#entity-fields input[value="server6"]').check();
+    await page.locator('#entity-apply').click(); await save();
+    assert.deepEqual(await page.evaluate(() => window.latestConfig.groups.find(g => g.id === 'group4').server_ids), ['server6']);
+    await page.locator('#configured-groups [data-id="group4"] button').filter({ hasText: '移除群绑定' }).click();
     await page.locator('#confirm-dialog button[value="confirm"]').click();
     await page.waitForFunction(() => document.querySelectorAll('#configured-groups article').length === 2);
     await page.locator('#configured-servers [data-id="server6"] button').filter({ hasText: '移除服务器' }).click();
@@ -316,7 +337,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM || path.join(process.env
     await page.reload();
     await page.waitForFunction(() => document.getElementById('config-state').textContent === '配置待修正');
     await page.locator('#configured-groups button').filter({ hasText: '编辑群聊' }).click();
-    assert.equal(await page.locator('#entity-platform_id').getAttribute('readonly'), '');
+    assert.equal(await page.locator('#entity-platform_id').isEnabled(), true);
     assert.equal(await page.locator('#entity-platform_id').inputValue(), 'qq-bot');
     assert.equal(await page.locator('#entity-group_id').inputValue(), '999999999');
     await page.locator('#entity-apply').click(); await save();

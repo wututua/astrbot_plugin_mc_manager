@@ -134,7 +134,7 @@ async function loadEntries() {
     const row = node('tr'); const cell = node('td', '暂无白名单。'); cell.colSpan = 5; row.append(cell); $('entries').append(row);
   }
 }
-const actionLabels = { add: '添加', remove: '移除', initial_import: '初始导入', import: '导入', sync: '同步', restart_requested: '申请重启', restart_success: '重启成功', restart_failed: '重启失败' };
+const actionLabels = { add: '添加', remove: '移除', initial_import: '初始导入', import: '导入', sync: '同步', restart_requested: '申请重启', restart_success: '重启成功', restart_failed: '重启失败', bind_group: '绑定群聊', unbind_group: '释放群绑定', change_group: '修改群号/平台', move_server: '转移服务器' };
 async function loadLogs() {
   const result = await api('apiGet', 'logs', { group: groupId(), page: logPage, user: $('log-user').value.trim() });
   logTotal = result.total;
