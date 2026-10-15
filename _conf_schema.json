@@ -1,0 +1,368 @@
+{
+  "server_root": {
+    "description": "Minecraft 服务端共同父目录",
+    "type": "string",
+    "default": "",
+    "hint": "例如 Windows D:/Minecraft，或 Linux /srv/minecraft；容器需挂载可写目录。"
+  },
+  "servers": {
+    "description": "服务器配置",
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "server": {
+        "name": "Java 服务端",
+        "display_item": "name",
+        "items": {
+          "id": {
+            "description": "服务器唯一 ID",
+            "type": "string",
+            "default": "server1"
+          },
+          "name": {
+            "description": "显示名称",
+            "type": "string",
+            "default": "服务器 1"
+          },
+          "directory": {
+            "description": "相对于共同父目录的服务端文件夹",
+            "type": "string",
+            "default": "server1"
+          },
+          "rcon_host": {
+            "description": "RCON 地址",
+            "type": "string",
+            "default": "127.0.0.1"
+          },
+          "rcon_port": {
+            "description": "RCON 端口",
+            "type": "int",
+            "default": 25575,
+            "hint": "不同服务端必须使用不同端口。"
+          },
+          "rcon_password": {
+            "description": "RCON 密码",
+            "type": "string",
+            "default": "",
+            "hint": "也可使用下方环境变量；管理面板读取此字段会脱敏。"
+          },
+          "rcon_password_env": {
+            "description": "RCON 密码环境变量名（优先）",
+            "type": "string",
+            "default": ""
+          },
+          "online_mode": {
+            "description": "使用正版 UUID",
+            "type": "bool",
+            "default": false,
+            "hint": "离线服使用 OfflinePlayer UUID；代理转发 UUID 的网络需确认与实际玩家一致。"
+          },
+          "tps_command": {
+            "description": "TPS 控制台命令",
+            "type": "string",
+            "default": "tps",
+            "hint": "Paper/Spigot 通常可用 tps；其他核心填实际支持的命令，例如 spark tps。"
+          },
+          "players_command": {
+            "description": "玩家查询及启动就绪检查命令",
+            "type": "string",
+            "default": "list"
+          }
+        }
+      }
+    }
+  },
+  "groups": {
+    "description": "群与服务器绑定",
+    "type": "template_list",
+    "default": [],
+    "templates": {
+      "group": {
+        "name": "群绑定",
+        "display_item": "group_id",
+        "items": {
+          "id": {
+            "description": "群配置唯一 ID",
+            "type": "string",
+            "default": "group1",
+            "hint": "有历史数据后请保持 ID 与群绑定不变。"
+          },
+          "platform_id": {
+            "description": "AstrBot 平台实例 ID",
+            "type": "string",
+            "default": "",
+            "hint": "从消息平台配置复制实例 ID，不能填写 aiocqhttp 这样的适配器类型名称。"
+          },
+          "group_id": {
+            "description": "群号 / 群 ID",
+            "type": "string",
+            "default": ""
+          },
+          "server_ids": {
+            "description": "本群服务器 ID",
+            "type": "list",
+            "default": [],
+            "hint": "如 [\"server1\", \"server2\", \"server3\"]；一个服务器只能属于一个群。"
+          },
+          "admin_ids": {
+            "description": "本群插件管理员用户 ID",
+            "type": "list",
+            "default": [],
+            "hint": "AstrBot 全局管理员同时有管理权限；不会自动信任群头衔。"
+          },
+          "max_entries_per_user": {
+            "description": "普通成员每人白名单上限",
+            "type": "int",
+            "default": 1
+          },
+          "broadcast_origin": {
+            "description": "广播会话（可选）",
+            "type": "string",
+            "default": "",
+            "hint": "通常留空；插件在群里收到指令后自动记录 unified_msg_origin。"
+          }
+        }
+      }
+    }
+  },
+  "page_size": {
+    "description": "群聊白名单与日志每页条数",
+    "type": "int",
+    "default": 10
+  },
+  "sync_interval": {
+    "description": "同步与广播重试间隔（秒）",
+    "type": "int",
+    "default": 30
+  },
+  "rcon_timeout": {
+    "description": "单次 RCON 超时（秒）",
+    "type": "int",
+    "default": 5
+  },
+  "restart_timeout": {
+    "description": "重启总超时（秒）",
+    "type": "int",
+    "default": 180
+  },
+  "poll_interval": {
+    "description": "重启状态检查间隔（秒）",
+    "type": "int",
+    "default": 3
+  },
+  "game_broadcast": {
+    "description": "重启成功同时发送游戏内广播",
+    "type": "bool",
+    "default": true
+  },
+  "commands": {
+    "description": "自定义指令",
+    "type": "object",
+    "items": {
+      "prefix": {
+        "description": "主指令别名",
+        "type": "string",
+        "default": "mc",
+        "hint": "逗号分隔；不含开头的 /。"
+      },
+      "help": {
+        "description": "帮助子指令别名",
+        "type": "string",
+        "default": "帮助,help",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "add": {
+        "description": "添加子指令别名",
+        "type": "string",
+        "default": "添加,add",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "list": {
+        "description": "查看子指令别名",
+        "type": "string",
+        "default": "查看,list",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "remove": {
+        "description": "移除子指令别名",
+        "type": "string",
+        "default": "移除,删除,remove",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "modify": {
+        "description": "修改子指令别名",
+        "type": "string",
+        "default": "修改,edit",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "players": {
+        "description": "在线玩家子指令别名",
+        "type": "string",
+        "default": "玩家,players",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "tps": {
+        "description": "TPS子指令别名",
+        "type": "string",
+        "default": "tps",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "status": {
+        "description": "状态子指令别名",
+        "type": "string",
+        "default": "状态,status",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "servers": {
+        "description": "服务器列表子指令别名",
+        "type": "string",
+        "default": "服务器,servers",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "restart": {
+        "description": "重启子指令别名",
+        "type": "string",
+        "default": "重启,restart",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "logs": {
+        "description": "日志子指令别名",
+        "type": "string",
+        "default": "日志,logs",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "sync": {
+        "description": "同步子指令别名",
+        "type": "string",
+        "default": "同步,sync",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "import": {
+        "description": "导入子指令别名",
+        "type": "string",
+        "default": "导入,import",
+        "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      }
+    }
+  },
+  "messages": {
+    "description": "自定义返回消息与菜单",
+    "type": "object",
+    "items": {
+      "help": {
+        "description": "帮助菜单完整文本",
+        "type": "text",
+        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "added": {
+        "description": "添加成功回复",
+        "type": "text",
+        "default": "已添加 #{id} {player}，所属用户：{user}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "removed": {
+        "description": "移除成功回复",
+        "type": "text",
+        "default": "已移除 #{id} {player}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "modified": {
+        "description": "修改成功回复",
+        "type": "text",
+        "default": "已修改 #{id} {old_player} → {player}\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "list": {
+        "description": "白名单列表回复",
+        "type": "text",
+        "default": "本群白名单（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "entry": {
+        "description": "单条白名单格式",
+        "type": "text",
+        "default": "#{id} {player} · 所属：{owner}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "players": {
+        "description": "在线玩家回复",
+        "type": "text",
+        "default": "[{server}] 在线玩家：{result}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "tps": {
+        "description": "TPS 查询回复",
+        "type": "text",
+        "default": "[{server}] TPS：{result}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "status": {
+        "description": "状态查询回复",
+        "type": "text",
+        "default": "[{server}] {result}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "servers": {
+        "description": "服务器列表回复",
+        "type": "text",
+        "default": "本群服务器：\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "error": {
+        "description": "操作失败回复",
+        "type": "text",
+        "default": "MC 操作失败：{error}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "logs": {
+        "description": "审计日志回复",
+        "type": "text",
+        "default": "本群操作日志（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "log_entry": {
+        "description": "单条日志格式",
+        "type": "text",
+        "default": "{time} | {action} | 群 {group} | 用户 {user} | {player} | {detail}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "sync": {
+        "description": "同步操作回复",
+        "type": "text",
+        "default": "{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "import": {
+        "description": "导入操作回复",
+        "type": "text",
+        "default": "已导入 {count} 条未托管条目（无归属，限管理员管理）。\n{sync}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_started": {
+        "description": "开始重启回复",
+        "type": "text",
+        "default": "正在重启 {servers}，将向本群广播结果。",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_success": {
+        "description": "重启成功群广播",
+        "type": "text",
+        "default": "✅ {server} 重启成功，耗时 {seconds} 秒。{detail}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "restart_failed": {
+        "description": "重启失败群广播",
+        "type": "text",
+        "default": "❌ {server} 重启失败：{error}",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      },
+      "game_restart_success": {
+        "description": "重启成功游戏内广播",
+        "type": "text",
+        "default": "服务器 {server} 已重启成功。",
+        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+      }
+    }
+  }
+}

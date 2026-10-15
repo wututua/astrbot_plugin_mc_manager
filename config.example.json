@@ -1,0 +1,146 @@
+{
+  "server_root": "D:/Minecraft",
+  "servers": [
+    {
+      "__template_key": "server",
+      "id": "server1",
+      "name": "服务器 1",
+      "directory": "server1",
+      "rcon_host": "127.0.0.1",
+      "rcon_port": 25575,
+      "rcon_password": "",
+      "rcon_password_env": "MC_RCON_1",
+      "online_mode": false,
+      "tps_command": "tps",
+      "players_command": "list"
+    },
+    {
+      "__template_key": "server",
+      "id": "server2",
+      "name": "服务器 2",
+      "directory": "server2",
+      "rcon_host": "127.0.0.1",
+      "rcon_port": 25576,
+      "rcon_password": "",
+      "rcon_password_env": "MC_RCON_2",
+      "online_mode": false,
+      "tps_command": "tps",
+      "players_command": "list"
+    },
+    {
+      "__template_key": "server",
+      "id": "server3",
+      "name": "服务器 3",
+      "directory": "server3",
+      "rcon_host": "127.0.0.1",
+      "rcon_port": 25577,
+      "rcon_password": "",
+      "rcon_password_env": "MC_RCON_3",
+      "online_mode": false,
+      "tps_command": "tps",
+      "players_command": "list"
+    },
+    {
+      "__template_key": "server",
+      "id": "server4",
+      "name": "服务器 4",
+      "directory": "server4",
+      "rcon_host": "127.0.0.1",
+      "rcon_port": 25578,
+      "rcon_password": "",
+      "rcon_password_env": "MC_RCON_4",
+      "online_mode": false,
+      "tps_command": "tps",
+      "players_command": "list"
+    },
+    {
+      "__template_key": "server",
+      "id": "server5",
+      "name": "服务器 5",
+      "directory": "server5",
+      "rcon_host": "127.0.0.1",
+      "rcon_port": 25579,
+      "rcon_password": "",
+      "rcon_password_env": "MC_RCON_5",
+      "online_mode": false,
+      "tps_command": "tps",
+      "players_command": "list"
+    }
+  ],
+  "groups": [
+    {
+      "__template_key": "group",
+      "id": "group1",
+      "platform_id": "YOUR_PLATFORM_INSTANCE_ID",
+      "group_id": "111111111",
+      "server_ids": [
+        "server1",
+        "server2",
+        "server3"
+      ],
+      "admin_ids": [
+        "123456789"
+      ],
+      "max_entries_per_user": 1,
+      "broadcast_origin": ""
+    },
+    {
+      "__template_key": "group",
+      "id": "group2",
+      "platform_id": "YOUR_PLATFORM_INSTANCE_ID",
+      "group_id": "222222222",
+      "server_ids": [
+        "server4",
+        "server5"
+      ],
+      "admin_ids": [
+        "987654321"
+      ],
+      "max_entries_per_user": 1,
+      "broadcast_origin": ""
+    }
+  ],
+  "page_size": 10,
+  "sync_interval": 30,
+  "rcon_timeout": 5,
+  "restart_timeout": 180,
+  "poll_interval": 3,
+  "game_broadcast": true,
+  "commands": {
+    "prefix": "mc",
+    "help": "帮助,help",
+    "add": "添加,add",
+    "list": "查看,list",
+    "remove": "移除,删除,remove",
+    "modify": "修改,edit",
+    "players": "玩家,players",
+    "tps": "tps",
+    "status": "状态,status",
+    "servers": "服务器,servers",
+    "restart": "重启,restart",
+    "logs": "日志,logs",
+    "sync": "同步,sync",
+    "import": "导入,import"
+  },
+  "messages": {
+    "help": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）",
+    "added": "已添加 #{id} {player}，所属用户：{user}\n{sync}",
+    "removed": "已移除 #{id} {player}\n{sync}",
+    "modified": "已修改 #{id} {old_player} → {player}\n{sync}",
+    "list": "本群白名单（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+    "entry": "#{id} {player} · 所属：{owner}",
+    "players": "[{server}] 在线玩家：{result}",
+    "tps": "[{server}] TPS：{result}",
+    "status": "[{server}] {result}",
+    "servers": "本群服务器：\n{entries}",
+    "error": "MC 操作失败：{error}",
+    "logs": "本群操作日志（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
+    "log_entry": "{time} | {action} | 群 {group} | 用户 {user} | {player} | {detail}",
+    "sync": "{sync}",
+    "import": "已导入 {count} 条未托管条目（无归属，限管理员管理）。\n{sync}",
+    "restart_started": "正在重启 {servers}，将向本群广播结果。",
+    "restart_success": "✅ {server} 重启成功，耗时 {seconds} 秒。{detail}",
+    "restart_failed": "❌ {server} 重启失败：{error}",
+    "game_restart_success": "服务器 {server} 已重启成功。"
+  }
+}

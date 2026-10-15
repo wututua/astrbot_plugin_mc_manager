@@ -1,0 +1,6 @@
+name: astrbot_plugin_mc_manager
+version: v1.0.0
+author: wutut
+display_name: Minecraft 群服管理
+short_desc: 群服隔离的多服白名单同步、玩家与 TPS 查询、重启监控及管理页面
+astrbot_version: ">=4.28.2,<5"
