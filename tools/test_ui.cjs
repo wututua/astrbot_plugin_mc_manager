@@ -36,6 +36,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
       groups: [{ id: 'group1', platform_id: 'qq-bot', group_id: '111111111', server_ids: ['server1', 'server2', 'server3'], admin_ids: ['123456789'], max_entries_per_user: 1, broadcast_origin: '' },
                { id: 'group2', platform_id: 'qq-bot', group_id: '222222222', server_ids: ['server4', 'server5'], admin_ids: ['987654321'], max_entries_per_user: 1, broadcast_origin: '' }] };
     let revision = 'revision-1';
+    let mockBackups=[];let mockNotification=true;let mockRequest=true;
     const entries = [{ id: 1, name: 'Steve', owner: '123456789', uuid: '5627dd98-e6be-3c21-b8a8-e92344183641' }, { id: 4, name: 'Alex', owner: '987654321', uuid: '36532b5e-c442-3dbb-a24c-c7e55d0f979a' }];
     const bindings = { groups: config.groups.map(g => ({ id: g.id, platform: g.platform_id, group_id: g.group_id })), servers: config.groups.flatMap(g => g.server_ids.map(s => ({ server: s, scope: g.id }))) };
     window.apiCalls = []; window.mockConflict = false; window.latestConfig = clone(config);
@@ -65,6 +66,12 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
         if (endpoint === 'snapshot' && configError) return { groups: [], servers: [], jobs: [], notifications_pending: 0, config_error: configError, configuration_required: true };
         if (endpoint === 'snapshot') return { groups: config.groups.map(g => ({ ...clone(g), group_ids: String(g.group_id).split(','), broadcast_group_ids: g.id === 'group1' ? String(g.group_id).split(',') : [], entries: g.id === 'group1' ? 2 : 0, broadcast_ready: g.id === 'group1' })),
           servers: config.servers.map((s, i) => ({ ...clone(s), directory: 'D:/Minecraft/' + s.directory, status: i === 2 ? '离线或 RCON 不可用' : '在线', pending: i === 2 ? 'RCON 不可用，等待自动同步' : '' })), jobs: [], notifications_pending: 0 };
+        if (endpoint === 'operations') {
+          if (params.kind === 'backups') return {backups:mockBackups,revision};
+          if (params.kind === 'notifications') return {notifications:mockNotification ? [{id:1,origin:'qq-bot:GroupMessage:111111111',text:'测试重启结果',created:'2026-10-16T00:00:00Z',state:'failed',attempts:5,last_error:'适配器发送失败'}] : []};
+          if (params.kind === 'requests') return {requests:mockRequest ? [{id:1,kind:'add',player:'NewPlayer',user:'123456789',user_name:'测试成员',created:'2026-10-16T00:00:00Z'}] : []};
+          return {workers:{sync:{state:'waiting',last_success:'2026-10-16T00:00:00Z',last_error:''}},storage:{plugin_data:{path:'data/plugin_data/astrbot_plugin_mc_manager',free_bytes:1024*1024*1024}},database_bytes:{'mc.sqlite3':8192},queue:{pending:1,failed:1},servers:[{id:'server1',name:'服务器 1',rcon:'在线（RCON 查询成功）',status_latency_ms:3,directory:{path:'D:/Minecraft/server1',writable:true,free_bytes:1024*1024*1024},whitelist:{readable:true,entries:2},spark:{status:'完整'}}]};
+        }
         if (endpoint === 'entries') return { entries: params.group === 'group1' ? clone(entries) : [] };
         if (endpoint === 'logs') return { logs: [{ time: '2026-10-13T14:30:00+00:00', action: 'add', group_id: '111111111', user: '123456789', user_name: '群成员', player: 'Steve', detail: '添加 #1；同步 server1,server2,server3' }], page: 1, total: 1 };
         if (endpoint === 'config') return { config: clone(config), config_error: configError, schema, platforms: window.noPlatforms ? [] : [{ id: 'qq-bot', name: 'aiocqhttp', display_name: 'QQ / OneBot' }], bindings: clone(bindings), revision,
@@ -72,6 +79,20 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
       },
       apiPost: async (endpoint, body) => {
         window.apiCalls.push({ endpoint, body: clone(body) });
+        if (endpoint === 'operations') {
+          if (body.action === 'backup_create') {const backup={name:'mc-backup-20261016-000000-000000000001.zip',created:'2026-10-16T00:00:00Z',label:'manual',bytes:1234};mockBackups=[backup];return backup;}
+          if (body.action === 'backup_download') return {name:body.name,content_base64:btoa('test backup'),sha256:'mock'};
+          if (body.action === 'restore_preview') return {token:'restore-token',revision,groups:[{id:'group1',group_id:'111111111'}],servers:['server1'],counts:{entries:2,logs:3},note:'恢复前自动备份当前数据。'};
+          if (body.action === 'restore_apply') return {message:'插件数据与配置已恢复。',revision};
+          if (body.action === 'notification_retry') {mockNotification=false;return {notifications:[]};}
+          if (body.action === 'approve' || body.action === 'reject') {mockRequest=false;return {message:'申请已处理。'};}
+          if (body.action === 'cleanup_preview') return {token:'cleanup-token',count:2,days:30,maximum:1000};
+          if (body.action === 'cleanup_apply') return {count:2};
+          if (body.action === 'bulk_preview') return {token:'bulk-token',additions:[{name:'NewPlayer',owner:'',uuid:'test'}],skipped:[],errors:[]};
+          if (body.action === 'bulk_apply' || body.action === 'bulk_remove' || body.action === 'bulk_transfer') return {count:1,sync:'已同步'};
+          if (body.action === 'entries_export') return {name:'whitelist.json',mime:'application/json',content:JSON.stringify(entries),truncated:false};
+          if (body.action === 'logs_export') return {name:'logs.csv',mime:'text/csv',content:'player,action\nSteve,add',truncated:false};
+        }
         if (endpoint === 'config') {
           if (window.mockConflict) return { status: 'error', message: '配置已被其他页面修改，请先重新载入配置后再保存。' };
           if (body.revision !== revision) throw new Error('配置版本冲突');
@@ -365,16 +386,39 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     assert.equal(await page.evaluate(() => window.latestConfig.servers[0].rcon_password), '');
     assert.equal(await page.evaluate(() => window.latestConfig.servers[0].rcon_password_env), 'MC_RCON_CLEAR_TEST');
 
+    // New operations share real page controls and the official bridge contract.
+    await page.locator('[data-tab="whitelist"]').click();
+    await page.locator('#entry-search').fill('Steve');await page.locator('#entry-filter button[type="submit"]').click();
+    await page.waitForFunction(()=>window.apiCalls.some(call=>call.endpoint==='entries' && call.params.search==='Steve'));
+    const whitelistDownload=page.waitForEvent('download');await page.locator('#entry-export').click();
+    assert.equal((await whitelistDownload).suggestedFilename(),'whitelist.json');
+    await page.locator('#bulk-open').click();await page.locator('#bulk-data').fill('NewPlayer');await page.locator('#bulk-preview-button').click();
+    await page.locator('#bulk-apply').waitFor({state:'visible'});await page.waitForFunction(()=>!document.getElementById('bulk-apply').disabled);
+    await page.locator('#bulk-apply').click();await page.locator('#confirm-dialog button[value="confirm"]').click();
+    await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='bulk_apply' && call.body.token==='bulk-token'));
+    await page.locator('#entries input[data-entry-id]').first().check();await page.locator('#bulk-transfer').click();await page.locator('#bulk-owner').fill('new-owner');await page.locator('#bulk-owner-form button[type="submit"]').click();await page.locator('#confirm-dialog button[value="confirm"]').click();
+    await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='bulk_transfer' && call.body.confirmed===true && call.body.owner==='new-owner'));
+    await page.locator('[data-tab="audit"]').click();await page.locator('#log-player').fill('Steve');const logDownload=page.waitForEvent('download');await page.locator('#log-export').click();assert.equal((await logDownload).suggestedFilename(),'logs.csv');
+    await page.locator('[data-tab="operations"]').click();await page.locator('#ops-health .ops-card').first().waitFor();
+    await page.locator('[data-ops-tab="backups"]').click();await page.locator('#ops-backup-create').click();await page.locator('#ops-backup-list .ops-card').first().waitFor();
+    const backupDownload=page.waitForEvent('download');await page.locator('#ops-backup-list button').filter({hasText:'下载'}).click();assert.match((await backupDownload).suggestedFilename(),/^mc-backup-.*\.zip$/);
+    await page.locator('#ops-backup-list button').filter({hasText:'预览恢复'}).click();await page.locator('#ops-restore-preview').waitFor({state:'visible'});await page.locator('#ops-restore-apply').click();await page.locator('#confirm-dialog button[value="confirm"]').click();
+    await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='restore_apply' && call.body.confirmed===true));
+    await page.locator('[data-ops-tab="notifications"]').click();await page.locator('#ops-notification-list button').click();await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='notification_retry'));
+    await page.locator('[data-ops-tab="requests"]').click();await page.locator('#ops-request-list button').filter({hasText:'通过'}).click();await page.locator('#confirm-dialog button[value="confirm"]').click();await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='approve'));
+    await page.locator('[data-ops-tab="cleanup"]').click();await page.locator('#ops-cleanup-preview').click();await page.waitForFunction(()=>!document.getElementById('ops-cleanup-apply').disabled);await page.locator('#ops-cleanup-apply').click();await page.locator('#confirm-dialog button[value="confirm"]').click();await page.waitForFunction(()=>window.apiCalls.some(call=>call.body?.action==='cleanup_apply'));
+
     // Check every main/config view at narrow phones, tablets and desktop widths.
     for (const width of [320, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: width < 600 ? 844 : 1000 });
-      for (const view of ['overview', 'whitelist', 'audit', 'settings']) {
+      for (const view of ['overview', 'whitelist', 'audit', 'operations', 'settings']) {
         await page.locator(`[data-tab="${view}"]`).click();
         await page.locator('#' + view).waitFor({ state: 'visible' });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${view} overflow at ${width}`);
         if (width === 390 && view === 'whitelist') await screenshot('whitelist-mobile.png');
         if (width === 1440 && view === 'whitelist') await screenshot('whitelist.png');
         if (width === 1440 && view === 'audit') await screenshot('audit.png');
+        if(view==='operations') for(const section of ['diagnostics','backups','notifications','requests','cleanup']){await page.locator('[data-ops-tab="'+section+'"]').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'operations '+section+' overflow at '+width);if(width===1440 && section==='diagnostics')await screenshot('operations.png');}
         if (view === 'settings') for (const section of ['connections', 'general', 'commands', 'messages', 'spark', 'advanced']) {
           await clickTab(section);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${section} overflow at ${width}`);
@@ -435,7 +479,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.locator('#entity-apply').click(); await save();
     assert.equal(await page.locator('#configuration-error').isHidden(), true);
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, blue responsive layout, provided logo, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, blue responsive layout, provided logo, diagnostics, backup/download/restore, queue retry, approval, retention, bulk preview/transfer and exports, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
   } catch (error) {
     const failureDir = path.join(root, '.research', 'ui-failures'); fs.mkdirSync(failureDir, { recursive: true });
     await page.screenshot({ path: path.join(failureDir, 'browser-failure.png'), fullPage: true });

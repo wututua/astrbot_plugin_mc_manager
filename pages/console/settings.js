@@ -3,6 +3,7 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const list = value => Array.isArray(value) ? value.map(String) : String(value || '').split(/[,，\r\n]+/).map(v => v.trim()).filter(Boolean);
 const ranges = { page_size: [1, 100], sync_interval: [5, 3600], rcon_timeout: [1, 30], restart_timeout: [5, 3600], poll_interval: [1, 30], spark_file_max_age: [3, 300], rcon_port: [1, 65535], max_entries_per_user: [1, 100] };
+Object.assign(ranges, {"notification_max_attempts":[1,100],"notification_retry_seconds":[0,3600],"notification_max_age_hours":[1,720],"background_retry_seconds":[1,300],"disk_warning_mb":[0,1048576],"backup_interval_hours":[0,8760],"backup_keep":[1,100],"logs_retention_days":[0,3650],"logs_max_entries":[0,10000000],"alert_consecutive":[1,100],"alert_cooldown":[10,86400],"alert_tps_threshold":[1,20],"query_cache_seconds":[0,60],"query_user_cooldown":[0,300],"query_group_cooldown":[0,300],"query_concurrency":[1,64],"restart_countdown":[0,3600]});
 const entityRequired = new Set(['id', 'name', 'directory', 'rcon_host', 'rcon_port', 'platform_id', 'group_id', 'max_entries_per_user', 'tps_mode', 'tps_command', 'players_command', 'spark_file']);
 const modeLabels = { spark: 'spark 性能指标（支持变量模板）', native: '服务端原生 TPS（完整返回）' };
 const defaultTpsCommand = mode => mode === 'native' ? 'tps' : 'spark tps';

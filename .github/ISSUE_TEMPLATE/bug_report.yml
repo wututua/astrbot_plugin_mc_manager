@@ -1,0 +1,31 @@
+name: 问题反馈
+description: 提供版本、复现步骤和脱敏日志
+body:
+  - type: markdown
+    attributes:
+      value: 请移除 RCON 密码、令牌和其他凭据；诊断报告可在“运维与数据 → 诊断”查看。
+  - type: input
+    id: versions
+    attributes:
+      label: AstrBot 与插件版本
+      placeholder: AstrBot 4.29.0 / 插件 v1.4.0 或 main 提交号
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 服务端与部署环境
+      description: 填写 Minecraft 核心及版本、Java、spark、Windows/Linux、Docker/启动器、安装方式。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤、预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏错误日志和诊断信息
+      render: text

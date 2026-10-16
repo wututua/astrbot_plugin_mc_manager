@@ -1,0 +1,115 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  python:
+    name: Python · ${{ matrix.os }} · AstrBot ${{ matrix.astrbot }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        astrbot: ["4.28.0", "4.29.0"]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+      MC_TEST_ASTRBOT_RELEASE: ${{ github.workspace }}/.research/ci-sdk/astrbot
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Download fixed AstrBot SDK
+        run: python tools/fetch_astrbot.py ${{ matrix.astrbot }} .research/ci-sdk
+      - name: Check Python code
+        run: python -m ruff check main.py mc_manager tests tools
+      - name: Compile Python sources
+        run: python -m compileall -q main.py mc_manager tests tools
+      - name: Check documentation and configuration
+        run: python tools/validate_docs.py
+      - name: Run all regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify installable package
+        run: python tools/build_release.py
+  browser:
+    name: Web · AstrBot ${{ matrix.astrbot }}
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        astrbot: ["4.28.0", "4.29.0"]
+    env:
+      MC_TEST_ASTRBOT_RELEASE: ${{ github.workspace }}/.research/ci-sdk/astrbot
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Download fixed AstrBot SDK
+        run: python tools/fetch_astrbot.py ${{ matrix.astrbot }} .research/ci-sdk
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Install browser test dependencies
+        run: npm install --prefix .research/browser playwright@1.64.0
+      - name: Install Chromium
+        run: npx --prefix .research/browser playwright install --with-deps chromium
+      - name: Run interaction and responsive checks
+        run: node tools/test_ui.cjs
+      - name: Save failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-failure-astrbot-${{ matrix.astrbot }}-${{ github.run_attempt }}
+          path: |
+            .research/ui-failures/*.png
+            docs/screenshots/*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+  agent:
+    name: Agent · Java ${{ matrix.java }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["8", "17", "21"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: Check Linux startup script
+        run: bash -n companion/start-with-spark-agent.example.sh
+      - name: Build Java 8 compatible agent
+        run: python tools/build_spark_agent.py
+      - name: Run real JVM sampling checks
+        run: python -m unittest discover -s tests -p test_spark_file.py -v

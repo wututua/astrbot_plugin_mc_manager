@@ -437,7 +437,9 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         self.service.send = fail
         await self.execute("restart", ["s1"], self.admin)
         await asyncio.gather(*list(self.service.restart_tasks.values()))
-        self.assertEqual(len(self.service.store.outbox()), 1)
+        self.assertEqual(len(self.service.store.notifications()), 1)
+        self.assertEqual(self.service.store.outbox(), [])
+        self.service.store.retry_notification(self.service.store.notifications()[0]["id"], "g1")
 
         async def success(origin, text):
             self.sent.append((origin, text))

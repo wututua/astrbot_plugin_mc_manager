@@ -234,13 +234,18 @@ class ReleaseTests(unittest.TestCase):
                     "pages/console/logo.png",
                     "views/console/logo.png",
                     "pages/console/settings.js",
+                    "pages/console/operations.js",
+                    "views/console/operations.js",
+                    "mc_manager/backups.py",
+                    "mc_manager/operations.py",
+                    "mc_manager/operations_store.py",
                     "views/console/index.html",
                     "views/console/app.js",
                     "views/console/settings.js",
                 ):
                     self.assertIn("astrbot_plugin_mc_manager/" + name, archive.namelist())
                 self.assertFalse(any("sqlite" in name or ".research" in name for name in archive.namelist()))
-                for filename in ("index.html", "app.js", "settings.js", "style.css"):
+                for filename in ("index.html", "app.js", "settings.js", "operations.js", "style.css"):
                     self.assertEqual(
                         archive.read("astrbot_plugin_mc_manager/pages/console/" + filename),
                         archive.read("astrbot_plugin_mc_manager/views/console/" + filename),

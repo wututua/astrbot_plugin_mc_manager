@@ -6,19 +6,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Actor, Group, MCError, Settings, group_ids
+from .operations_store import OperationsStore
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-class Store:
+class Store(OperationsStore):
     def __init__(self, directory: Path):
         directory.mkdir(parents=True, exist_ok=True)
         self.path = directory / "mc.sqlite3"
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
         self._savepoint = 0
+        try:
+            self._initialize()
+        except BaseException:
+            self.db.close()
+            raise
+
+    def _initialize(self):
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript("""
@@ -75,6 +83,8 @@ class Store:
                 if len(identities) == 1:
                     self.db.execute("INSERT OR IGNORE INTO group_sessions VALUES(?,?,?)", tuple(row))
 
+        self.upgrade_operations()
+
     @contextmanager
     def transaction(self):
         if self.db.in_transaction:
@@ -124,6 +134,10 @@ class Store:
             for scope, row in previous.items():
                 if scope not in settings.groups:
                     self._reset_scope_delivery(scope)
+                    self.db.execute(
+                        "UPDATE requests SET status='cancelled',detail='群配置已移除' WHERE scope=? AND status='pending'",
+                        (scope,),
+                    )
                     self.db.execute("UPDATE scopes SET active=0 WHERE id=?", (scope,))
                     if row["active"] or any(bound_scope == scope for _, bound_scope in old_bindings):
                         group = Group(scope, row["platform"], row["group_id"], ())
@@ -167,6 +181,12 @@ class Store:
                     if changed:
                         retained = self.origins(group.id) if old["platform"] == group.platform else {}
                         self._reset_scope_delivery(group.id)
+                        for pending in self.pending_requests(group.id):
+                            if old["platform"] != group.platform or pending["group_id"] not in group.group_ids:
+                                self.db.execute(
+                                    "UPDATE requests SET status='cancelled',detail='群或平台绑定已变化' WHERE id=?",
+                                    (pending["id"],),
+                                )
                         for identity, origin in retained.items():
                             if identity in group.group_ids:
                                 self.remember(group.id, origin, identity)
@@ -344,7 +364,7 @@ class Store:
     def job(self, sid: str, scope: str, origin: str):
         with self.transaction():
             self.db.execute(
-                "INSERT INTO jobs VALUES(?,?,?,?,?,?) ON CONFLICT(server) DO UPDATE SET scope=excluded.scope,origin=excluded.origin,started=excluded.started,status=excluded.status,detail=excluded.detail",
+                "INSERT INTO jobs(server,scope,origin,started,status,detail,phase) VALUES(?,?,?,?,?,?,'queued') ON CONFLICT(server) DO UPDATE SET scope=excluded.scope,origin=excluded.origin,started=excluded.started,status=excluded.status,detail=excluded.detail,phase='queued'",
                 (sid, scope, origin, now(), "running", ""),
             )
 
@@ -358,7 +378,7 @@ class Store:
         recipients: list[tuple[str, str]] | None = None,
     ):
         with self.transaction():
-            self.db.execute("UPDATE jobs SET status=?,detail=? WHERE server=?", (status, detail, sid))
+            self.db.execute("UPDATE jobs SET status=?,detail=?,phase=? WHERE server=?", (status, detail, status, sid))
             if recipients is None:
                 row = self.db.execute("SELECT scope FROM jobs WHERE server=?", (sid,)).fetchone()
                 recipients = [(row[0] if row else "", origin)] if origin else []
@@ -369,16 +389,6 @@ class Store:
 
     def jobs(self) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM jobs ORDER BY started DESC")]
-
-    def outbox(self) -> list[dict]:
-        return [dict(r) for r in self.db.execute("SELECT * FROM outbox ORDER BY id LIMIT 20")]
-
-    def delivered(self, identifier: int, success: bool):
-        with self.transaction():
-            if success:
-                self.db.execute("DELETE FROM outbox WHERE id=?", (identifier,))
-            else:
-                self.db.execute("UPDATE outbox SET attempts=attempts+1 WHERE id=?", (identifier,))
 
     def close(self):
         self.db.close()

@@ -10,6 +10,10 @@ AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器�
 
 **AstrBot `>=4.28.0,<5` · Python `3.12+`**
 
+[![CI](https://github.com/wututua/astrbot_plugin_mc_manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wututua/astrbot_plugin_mc_manager/actions/workflows/ci.yml)
+
+运维增强、备份恢复、告警、批量管理与审核功能目前为 main 的未发布改动；现有 Releases 安装包尚未包含。
+
 [下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](CHANGELOG.md)
 
 ## 主要功能
@@ -18,6 +22,7 @@ AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器�
 - **白名单管理**：添加、查看、修改、移除，固定编号、成员归属和自动同步。
 - **玩家与性能**：在线玩家、状态、服务端原生 TPS 或 spark TPS / Tick 耗时 / CPU 查询。
 - **重启与广播**：发送 `stop`，监控外部脚本重启，并向关联群通知结果。
+- **运维与数据**：环境诊断、插件备份恢复、失败通知重试、日志清理、告警、批量管理和可选申请审核。
 - **网页管理**：蓝白简约界面，支持桌面和手机，可配置服务器、群聊、管理员、指令、菜单和回复模板，查看操作日志。
 
 <details>
@@ -105,6 +110,7 @@ AstrBot 需要能够读写各服的 `whitelist.json` 并连接 RCON。同机各�
 | [部署指南](docs/DEPLOY.md) / [网页管理](docs/WEB_PANEL.md) | 安装、RCON、群绑定、容器、重启与排查 |
 | [配置字段](docs/CONFIGURATION.md) | 完整参数、指令和回复模板 |
 | [TPS 变量](docs/TPS_VARIABLES.md) / [Java 采集器](companion/README.md) | 性能指标、自定义输出与启动参数 |
+| [运维与审核](docs/OPERATIONS.md) / [环境矩阵](docs/COMPATIBILITY_MATRIX.md) | 备份、告警、权限、审核与实际验证边界 |
 | [开发指南](docs/DEVELOPMENT.md) | 测试、构建与开发环境 |
 | [接口适配](docs/ASTRBOT_COMPATIBILITY.md) / [验证记录](docs/VALIDATION.md) | 支持范围与测试边界 |
 | [更新日志](CHANGELOG.md) / [实现依据](docs/RESEARCH.md) | 版本变化与设计说明 |

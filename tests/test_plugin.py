@@ -298,7 +298,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(json.loads(response.body)["message"], payload)
 
     async def test_registered_routes_and_unload_cleanup(self):
-        self.assertEqual(len(self.context.registered_web_apis), 6)
+        self.assertEqual(len(self.context.registered_web_apis), 8)
         self.assertTrue(all(x[0].startswith("/astrbot_plugin_mc_manager/") for x in self.context.registered_web_apis))
         await self.plugin.terminate()
         self.assertEqual(self.context.registered_web_apis, [])
@@ -528,7 +528,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         other = ("/another_plugin/status", another_handler, ["GET"], "another plugin")
         self.context.registered_web_apis.append(other)
         await self.plugin.initialize()
-        self.assertEqual(len(self.context.registered_web_apis), 7)
+        self.assertEqual(len(self.context.registered_web_apis), 9)
         await self.plugin.terminate()
         self.assertEqual(self.context.registered_web_apis, [other])
 
@@ -589,7 +589,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
             await self.plugin.initialize()
         self.assertIsNone(self.plugin.service)
         self.assertTrue(self.plugin.config_error)
-        self.assertEqual(len(self.context.registered_web_apis), 6)
+        self.assertEqual(len(self.context.registered_web_apis), 8)
 
     async def test_incomplete_group_config_loads_repair_ui_without_mutating_original(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))

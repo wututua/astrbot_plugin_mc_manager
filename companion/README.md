@@ -32,6 +32,8 @@ cd -- "$(dirname -- "$0")" || exit 1
 java "-javaagent:$(pwd)/astrbot-spark-agent.jar" -Xms2G -Xmx4G -jar server.jar nogui
 ```
 
+也可使用独立的 [Linux 启动模板](start-with-spark-agent.example.sh)，通过环境变量修改 MC_JAVA、MC_JAR、MC_XMS、MC_XMX 和 MC_RESTART_DELAY。在服务端目录运行 bash start-with-spark-agent.example.sh 即可。
+
 已有自动重启循环时，把参数加入循环内的实际 Java 启动命令，不要另起一个单独的采集 JVM。
 
 ## 参数文件与其他启动方式

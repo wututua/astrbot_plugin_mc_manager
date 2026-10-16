@@ -103,6 +103,12 @@ python tools/build_release.py
 
 如变更 agent 源码，先重编译 JAR，再构建插件 ZIP。直接从 GitHub 仓库安装时，AstrBot 使用源码中的 `pages/`；4.29 的页面发现同样保留该回退目录。
 
+## 自动检查
+
+.github/workflows/ci.yml 配置 Windows/Linux 与 AstrBot 4.28.0/4.29.0 回归、两套官方 SDK 浏览器检查，以及 Java 8/17/21 的 agent 检查。工作流在 main 推送、Pull Request 和手动运行时触发，只有仓库读取权限；同一分支的新运行会取消旧运行。每个任务设置超时，网页失败时保留 7 天截图。运行结果可通过 README 的 CI 徽章或仓库 Actions 页面查看；手动执行选择 CI → Run workflow。
+
+tools/fetch_astrbot.py 下载固定官方 wheel 并提取接口源码；tools/validate_docs.py 检查相对链接、JSON 和凭据模式。运维测试使用临时目录、模拟 RCON、真实 SQLite 和官方 Web API，恢复测试会注入失败验证回滚。
+
 ## 提交与发布
 
 1. 更新 `metadata.yaml`、`pyproject.toml`、`mc_manager/__init__.py` 中的版本，并同步安装包测试的版本预期。

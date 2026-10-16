@@ -94,6 +94,12 @@
             "type": "string",
             "default": ".astrbot-spark-tps.txt",
             "hint": "仅 spark 模式生效。本服目录内的相对路径；使用 Java agent 时每 2 秒更新。原生模式不会读取此文件。"
+          },
+          "restart_admin_ids": {
+            "type": "list",
+            "description": "共享服务器重启负责人（可选）",
+            "default": [],
+            "hint": "填写 平台实例ID:用户ID。非空时，群重启管理员还需列在此处；全局管理员不受此限制。"
           }
         }
       }
@@ -148,6 +154,23 @@
             "type": "string",
             "default": "",
             "hint": "通常留空；插件在群里收到指令后自动记录 unified_msg_origin。"
+          },
+          "whitelist_admin_ids": {
+            "type": "list",
+            "description": "白名单管理员用户 ID",
+            "default": [],
+            "hint": "可管理条目、日志、申请和同步，不因此获得重启权限。"
+          },
+          "restart_admin_ids": {
+            "type": "list",
+            "description": "额外重启管理员用户 ID",
+            "default": [],
+            "hint": "仅授予本组服务器重启与取消权限；admin_ids 仍为完整管理员。"
+          },
+          "approval_required": {
+            "type": "bool",
+            "description": "成员添加和修改需审核",
+            "default": false
           }
         }
       }
@@ -270,6 +293,41 @@
         "type": "string",
         "default": "导入,import",
         "hint": "逗号分隔；可以只保留 add 之类的英文。"
+      },
+      "diagnose": {
+        "type": "string",
+        "description": "诊断指令别名",
+        "default": "诊断,diagnose"
+      },
+      "backup": {
+        "type": "string",
+        "description": "备份指令别名",
+        "default": "备份,backup"
+      },
+      "cancel": {
+        "type": "string",
+        "description": "取消重启指令别名",
+        "default": "取消重启,cancel"
+      },
+      "requests": {
+        "type": "string",
+        "description": "申请列表指令别名",
+        "default": "申请,requests"
+      },
+      "approve": {
+        "type": "string",
+        "description": "审核通过指令别名",
+        "default": "通过,approve"
+      },
+      "reject": {
+        "type": "string",
+        "description": "审核拒绝指令别名",
+        "default": "拒绝,reject"
+      },
+      "mine": {
+        "type": "string",
+        "description": "我的白名单指令别名",
+        "default": "我的,mine"
       }
     }
   },
@@ -280,7 +338,7 @@
       "help": {
         "description": "帮助菜单完整文本",
         "type": "text",
-        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）",
+        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）\n{prefix} {mine}：查看自己的条目\n{prefix} {diagnose} [服务器]：诊断（管理员）\n{prefix} {requests}：查看待审核申请\n{prefix} {approve} <申请编号>：通过申请（管理员）\n{prefix} {reject} <申请编号> [原因]：拒绝申请（管理员）\n{prefix} {cancel} <服务器>：取消倒计时（重启管理员）\n{prefix} {backup}：创建插件备份（全局管理员）",
         "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
       },
       "added": {
@@ -402,6 +460,56 @@
         "type": "text",
         "default": "[{server}] spark TPS 查询失败或无法解析：\n{tps_raw}",
         "hint": "没有解析出任何指标时使用。支持 {server}、{server_id}、{tps_raw}、{result} 等变量。"
+      },
+      "restart_countdown": {
+        "type": "text",
+        "description": "重启倒计时通知",
+        "default": "⏳ {server} 将在 {seconds} 秒后重启，请及时保存进度。"
+      },
+      "restart_cancelled": {
+        "type": "text",
+        "description": "重启取消通知",
+        "default": "已取消 {server} 的重启倒计时。"
+      },
+      "request_created": {
+        "type": "text",
+        "description": "申请提交回复",
+        "default": "白名单申请 #{id} 已提交：{player}，等待管理员审核。"
+      },
+      "request_approved": {
+        "type": "text",
+        "description": "审核通过回复",
+        "default": "已通过申请 #{id}：{player}\n{sync}"
+      },
+      "request_rejected": {
+        "type": "text",
+        "description": "审核拒绝回复",
+        "default": "已拒绝申请 #{id}：{detail}"
+      },
+      "alert": {
+        "type": "text",
+        "description": "异常告警模板",
+        "default": "⚠️ [{server}] {alert_type}：{alert_detail}"
+      },
+      "alert_recovery": {
+        "type": "text",
+        "description": "恢复通知模板",
+        "default": "✅ [{server}] {alert_type} 已恢复：{alert_detail}"
+      },
+      "diagnostics": {
+        "type": "text",
+        "description": "诊断结果回复",
+        "default": "MC 诊断\n{result}"
+      },
+      "requests": {
+        "type": "text",
+        "description": "申请列表回复",
+        "default": "待审核申请\n{entries}"
+      },
+      "backup_created": {
+        "type": "text",
+        "description": "备份创建回复",
+        "default": "已创建插件数据备份：{result}\n请在管理网页下载，备份包含配置凭据。"
       }
     }
   },
@@ -416,5 +524,117 @@
     "type": "int",
     "default": 10,
     "hint": "过期数据会拒绝使用，默认 10 秒。Java agent 停止或服务器退出后不会继续返回旧数值。"
+  },
+  "notification_max_attempts": {
+    "type": "int",
+    "description": "广播最大重试次数",
+    "default": 5,
+    "hint": "范围 1～100。"
+  },
+  "notification_retry_seconds": {
+    "type": "int",
+    "description": "广播重试基础间隔（秒）",
+    "default": 30,
+    "hint": "范围 0～3600。"
+  },
+  "notification_max_age_hours": {
+    "type": "int",
+    "description": "广播有效期（小时）",
+    "default": 24,
+    "hint": "范围 1～720。"
+  },
+  "background_retry_seconds": {
+    "type": "int",
+    "description": "后台异常重试间隔（秒）",
+    "default": 5,
+    "hint": "范围 1～300。"
+  },
+  "disk_warning_mb": {
+    "type": "int",
+    "description": "磁盘空间告警阈值（MB，0 关闭）",
+    "default": 512,
+    "hint": "范围 0～1048576。"
+  },
+  "backup_interval_hours": {
+    "type": "int",
+    "description": "定时备份间隔（小时，0 关闭）",
+    "default": 0,
+    "hint": "范围 0～8760。"
+  },
+  "backup_keep": {
+    "type": "int",
+    "description": "备份保留数量",
+    "default": 7,
+    "hint": "范围 1～100。"
+  },
+  "logs_retention_days": {
+    "type": "int",
+    "description": "日志保留天数（0 不限制）",
+    "default": 0,
+    "hint": "范围 0～3650。"
+  },
+  "logs_max_entries": {
+    "type": "int",
+    "description": "日志最多保留条数（0 不限制）",
+    "default": 0,
+    "hint": "范围 0～10000000。"
+  },
+  "alert_consecutive": {
+    "type": "int",
+    "description": "告警连续异常次数",
+    "default": 3,
+    "hint": "范围 1～100。"
+  },
+  "alert_cooldown": {
+    "type": "int",
+    "description": "告警重复通知间隔（秒）",
+    "default": 900,
+    "hint": "范围 10～86400。"
+  },
+  "alert_tps_threshold": {
+    "type": "int",
+    "description": "spark TPS 告警阈值",
+    "default": 15,
+    "hint": "范围 1～20。"
+  },
+  "query_cache_seconds": {
+    "type": "int",
+    "description": "查询缓存时间（秒，0 关闭）",
+    "default": 3,
+    "hint": "范围 0～60。"
+  },
+  "query_user_cooldown": {
+    "type": "int",
+    "description": "用户查询冷却（秒，0 关闭）",
+    "default": 0,
+    "hint": "范围 0～300。"
+  },
+  "query_group_cooldown": {
+    "type": "int",
+    "description": "群查询冷却（秒，0 关闭）",
+    "default": 0,
+    "hint": "范围 0～300。"
+  },
+  "query_concurrency": {
+    "type": "int",
+    "description": "RCON 查询并发上限",
+    "default": 8,
+    "hint": "范围 1～64。"
+  },
+  "restart_countdown": {
+    "type": "int",
+    "description": "重启前倒计时（秒，0 立即重启）",
+    "default": 0,
+    "hint": "范围 0～3600。"
+  },
+  "alerts_enabled": {
+    "type": "bool",
+    "description": "启用主动告警",
+    "default": false
+  },
+  "approval_required": {
+    "type": "bool",
+    "description": "全局强制白名单申请审核",
+    "default": false
   }
 }

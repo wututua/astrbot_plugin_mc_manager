@@ -16,6 +16,7 @@
 | 会话与广播 | `unified_msg_origin`、`MessageChain().message()`、`Context.send_message()` |
 | 数据目录 | `StarTools.get_data_dir`，保留已有持久化目录 |
 | 配置保存 | `AstrBotConfig.save_config_async`，检查保存结果；取消时等待实际保存完成 |
+| 运维与数据 | 官方 Web API 的 operations GET/POST；备份恢复需要后台管理员、预览 token 与配置版本；恢复时等待活动请求结束 |
 | 网页接口 | `astrbot.api.web.request/json_response/error_response`，结合后台鉴权与身份检查 |
 | 平台选项 | 通过平台管理器 `get_insts()` 枚举实例，只返回 ID、类型和名称 |
 | 页面 SDK | 优先 `AstrBotPluginView`，兼容 `AstrBotPluginPage`，使用 `ready/apiGet/apiPost` |
@@ -45,7 +46,7 @@ CSS、JavaScript 和页面本地 `logo.png` 同样复制并逐文件验证一致
 | 4.28.1 / 4.28.2 | 固定发布包的接口与适配检查，历史命令、Web API 和 ZIP 导入回归 |
 | 4.29.0 | 完整回归，额外核对 views 页面发现、SDK 及 Web API 依赖变化 |
 
-浏览器测试使用对应正式包的官方 SDK，模拟后端与父页面响应。完整 AstrBot 进程、真实聊天平台和 MC 服务端仍需实际联调。具体数量和边界见 [VALIDATION.md](VALIDATION.md)。历史版本的 4.26/4.27 记录只保留在更新日志，不属于当前支持范围。
+浏览器测试使用对应正式包的官方 SDK，模拟后端与父页面响应。完整 AstrBot 进程、真实聊天平台和 MC 服务端仍需实际联调。具体数量和边界见 [VALIDATION.md](VALIDATION.md)，运维参数与审核权限见[运维说明](OPERATIONS.md)。历史版本的 4.26/4.27 记录只保留在更新日志，不属于当前支持范围。
 
 ## 升级步骤
 

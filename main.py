@@ -4,6 +4,8 @@ import asyncio
 import copy
 import json
 import secrets
+import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from astrbot.api import AstrBotConfig
@@ -12,6 +14,7 @@ from astrbot.api.star import Context, Star, StarTools
 from astrbot.api.web import error_response, json_response, request
 
 from .mc_manager.config import Actor, MCError, Settings, positive
+from .mc_manager.dashboard import DashboardOperationsMixin
 from .mc_manager.service import Service
 from .mc_manager.spark import DEFAULT_TPS_TEMPLATE, variables_table
 from .mc_manager.store import Store
@@ -48,7 +51,7 @@ class MCCommandFilter(filter.CustomFilter):
         return True
 
 
-class MCManagerPlugin(Star):
+class MCManagerPlugin(DashboardOperationsMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context, config)
         self.config = config
@@ -60,10 +63,36 @@ class MCManagerPlugin(Star):
             self.settings = self._recovery_settings()
         self.service: Service | None = None
         self.guard = asyncio.Lock()
+        self.active_operations = 0
+        self.operations_idle = asyncio.Event()
+        self.operations_idle.set()
         self.config_revision = secrets.token_urlsafe(18)
         self.config_schema = json.loads((Path(__file__).parent / "_conf_schema.json").read_text(encoding="utf-8"))
         self.data_dir = StarTools.get_data_dir(PLUGIN_NAME)
         MCCommandFilter.settings = self.settings
+
+    @asynccontextmanager
+    async def operation(self, allow_repair: bool = False):
+        async with self.guard:
+            service = self.service if allow_repair else self._service()
+            self.active_operations += 1
+            self.operations_idle.clear()
+        try:
+            yield service
+        finally:
+            self.active_operations -= 1
+            if not self.active_operations:
+                self.operations_idle.set()
+
+    def _new_service(self, settings):
+        return Service(settings, self.data_dir, self._send)
+
+    def _install_service(self, settings, service, error=""):
+        self.settings = settings
+        self.service = service
+        self.config_error = error
+        self.config_revision = secrets.token_urlsafe(18)
+        MCCommandFilter.settings = settings
 
     def _recovery_settings(self) -> Settings:
         commands = self.config.get("commands", {})
@@ -76,6 +105,8 @@ class MCManagerPlugin(Star):
     def _register_web_apis(self):
         for route, handler, methods, desc in [
             ("snapshot", self.page_snapshot, ["GET"], "服务器与群绑定状态"),
+            ("operations", self.page_operations, ["GET"], "诊断、备份、通知与申请"),
+            ("operations", self.page_operations, ["POST"], "插件运维与批量管理"),
             ("entries", self.page_entries, ["GET"], "白名单列表"),
             ("logs", self.page_logs, ["GET"], "审计日志"),
             ("action", self.page_action, ["POST"], "管理操作"),
@@ -93,7 +124,7 @@ class MCManagerPlugin(Star):
                 try:
                     self.service = Service(self.settings, self.data_dir, self._send)
                     await self.service.start()
-                except MCError as exc:
+                except (MCError, sqlite3.DatabaseError, OSError) as exc:
                     if self.service is not None:
                         await self.service.close()
                         self.service = None
@@ -143,7 +174,6 @@ class MCManagerPlugin(Star):
             words = event.get_message_str().strip().split(maxsplit=1)
             text = words[1] if len(words) > 1 else ""
         event.stop_event()
-        tps_reply = False
         try:
             user = str(event.get_sender_id() or "")
             actor = Actor(
@@ -154,16 +184,15 @@ class MCManagerPlugin(Star):
                 self._verified_chat_admin(event, user),
                 event.unified_msg_origin,
             )
-            async with self.guard:
+            async with self.operation() as service:
                 action, args = self.settings.route(text)
-                tps_reply = action == "tps"
-                result = await self._service().execute(actor, action, args)
+                result = await service.execute(actor, action, args)
         except MCError as exc:
             result = self.settings.render("error", error=exc)
         except Exception:
             self.logger.exception("MC 指令处理失败")
             result = self.settings.render("error", error="内部错误，请管理员检查 AstrBot 日志和同步状态。")
-        replies = message_chunks(result) if tps_reply else [result]
+        replies = message_chunks(result)
         if len(replies) > 1:
             # A stopped framework event may consume only the first yielded
             # result. Send every long-response chunk before returning.
@@ -187,7 +216,7 @@ class MCManagerPlugin(Star):
     async def page_snapshot(self):
         try:
             self._page_admin()
-            async with self.guard:
+            async with self.operation(allow_repair=True) as service:
                 if self.config_error:
                     return json_response(
                         {
@@ -199,7 +228,6 @@ class MCManagerPlugin(Star):
                             "configuration_required": True,
                         }
                     )
-                service = self._service()
                 if request.query.get("probe", "") == "1":
                     await service.probe_servers()
                 return json_response({**service.snapshot(), "config_error": "", "configuration_required": False})
@@ -209,22 +237,29 @@ class MCManagerPlugin(Star):
     async def page_entries(self):
         try:
             self._page_admin()
-            async with self.guard:
+            async with self.operation() as service:
                 group = self._group(request.query.get("group", ""))
-                service = self._service()
                 async with service.locks[group.id]:
                     await service.ensure_group(group)
-                    return json_response({"entries": service.store.entries(group.id)})
+                    return json_response(
+                        service.entries_page(
+                            group,
+                            positive(request.query.get("page", "1"), "页码"),
+                            positive(request.query.get("size", "20"), "每页数量", 1, 100),
+                            request.query.get("search", ""),
+                        )
+                    )
         except MCError as exc:
             return error_response(str(exc))
 
     async def page_logs(self):
         try:
             self._page_admin()
-            async with self.guard:
+            async with self.operation() as service:
                 group = self._group(request.query.get("group", ""))
                 page = positive(request.query.get("page", "1"), "页码")
-                rows, total = self._service().store.logs(group.id, page, 20, request.query.get("user", ""))
+                filters = {key: request.query.get(key, "") for key in ("user", "player", "action", "start", "end")}
+                rows, total = service.store.filtered_logs(group.id, page, 20, **filters)
                 return json_response({"logs": rows, "total": total, "page": page})
         except MCError as exc:
             return error_response(str(exc))
@@ -236,18 +271,35 @@ class MCManagerPlugin(Star):
             if not isinstance(payload, dict):
                 raise MCError("请求必须是 JSON 对象。")
             action = payload.get("action")
-            if action not in {"add", "remove", "modify", "sync", "import", "restart", "players", "tps", "status"}:
+            if action not in {
+                "add",
+                "remove",
+                "modify",
+                "sync",
+                "import",
+                "restart",
+                "players",
+                "tps",
+                "status",
+                "diagnose",
+                "backup",
+                "cancel",
+                "requests",
+                "approve",
+                "reject",
+                "mine",
+            }:
                 raise MCError("不支持该操作。")
             args = payload.get("args", [])
             if not isinstance(args, list) or len(args) > 2 or any(not isinstance(a, str) or len(a) > 128 for a in args):
                 raise MCError("参数格式无效。")
-            async with self.guard:
+            async with self.operation() as service:
                 group = self._group(str(payload.get("group", "")))
                 # The dashboard operator is distinct from every chat user.
                 actor = Actor(
                     group.platform, group.group_ids[0], "dashboard:" + request.username, request.username, True, ""
                 )
-                result = await self._service().execute(actor, action, args)
+                result = await service.execute(actor, action, args)
                 return json_response({"message": result})
         except MCError as exc:
             return error_response(str(exc))
@@ -271,14 +323,19 @@ class MCManagerPlugin(Star):
         return options
 
     def _config_bindings(self) -> dict:
-        store = self.service.store if self.service is not None else Store(self.data_dir)
+        store = None
         try:
+            store = self.service.store if self.service is not None else Store(self.data_dir)
             return {
                 "groups": [dict(row) for row in store.db.execute("SELECT id,platform,group_id,active FROM scopes")],
                 "servers": [dict(row) for row in store.db.execute("SELECT server,scope FROM bindings")],
             }
+        except (sqlite3.DatabaseError, OSError):
+            if self.service is not None:
+                raise
+            return {"groups": [], "servers": []}
         finally:
-            if self.service is None:
+            if self.service is None and store is not None:
                 store.close()
 
     @staticmethod
@@ -297,6 +354,8 @@ class MCManagerPlugin(Star):
             self._page_admin()
             async with self.guard:
                 payload = self._redact_passwords(copy.deepcopy(dict(self.config)))
+                if not self.config_error:
+                    payload["commands"] = dict(self.settings.commands)
                 return json_response(
                     {
                         "config": payload,
@@ -332,6 +391,7 @@ class MCManagerPlugin(Star):
                 raise MCError("请求需要 config 对象。")
             raw = payload["config"]
             async with self.guard:
+                await self.operations_idle.wait()
                 current = self.service
                 if "revision" in payload and payload["revision"] != self.config_revision:
                     raise MCError("配置已被其他页面修改，请先重新载入配置后再保存。")
@@ -396,9 +456,12 @@ class MCManagerPlugin(Star):
 
     async def terminate(self):
         async with self.guard:
+            await self.operations_idle.wait()
             if self.service:
                 await self.service.close()
                 self.service = None
+            if getattr(self, "_repair_backups", None) is not None:
+                self._repair_backups.close()
             if MCCommandFilter.settings is self.settings:
                 MCCommandFilter.settings = None
             # Remove only bound handlers owned by this plugin instance.

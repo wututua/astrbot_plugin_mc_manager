@@ -16,6 +16,13 @@ class MCError(Exception):
 
 
 ALIASES = {
+    "diagnose": "诊断,diagnose",
+    "backup": "备份,backup",
+    "cancel": "取消重启,cancel",
+    "requests": "申请,requests",
+    "approve": "通过,approve",
+    "reject": "拒绝,reject",
+    "mine": "我的,mine",
     "help": "帮助,help",
     "add": "添加,add",
     "list": "查看,list",
@@ -31,6 +38,16 @@ ALIASES = {
     "import": "导入,import",
 }
 MESSAGES = {
+    "diagnostics": "MC 诊断\n{result}",
+    "requests": "待审核申请\n{entries}",
+    "backup_created": "已创建插件数据备份：{result}\n请在管理网页下载，备份包含配置凭据。",
+    "restart_countdown": "⏳ {server} 将在 {seconds} 秒后重启，请及时保存进度。",
+    "restart_cancelled": "已取消 {server} 的重启倒计时。",
+    "request_created": "白名单申请 #{id} 已提交：{player}，等待管理员审核。",
+    "request_approved": "已通过申请 #{id}：{player}\n{sync}",
+    "request_rejected": "已拒绝申请 #{id}：{detail}",
+    "alert": "⚠️ [{server}] {alert_type}：{alert_detail}",
+    "alert_recovery": "✅ [{server}] {alert_type} 已恢复：{alert_detail}",
     "help": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）",
     "added": "已添加 #{id} {player}，所属用户：{user}\n{sync}",
     "removed": "已移除 #{id} {player}\n{sync}",
@@ -53,10 +70,15 @@ MESSAGES = {
     "restart_failed": "❌ {server} 重启失败：{error}",
     "game_restart_success": "服务器 {server} 已重启成功。",
 }
+MESSAGES["help"] += (
+    "\n{prefix} {mine}：查看自己的条目\n{prefix} {diagnose} [服务器]：诊断（管理员）\n{prefix} {requests}：查看待审核申请\n{prefix} {approve} <申请编号>：通过申请（管理员）\n{prefix} {reject} <申请编号> [原因]：拒绝申请（管理员）\n{prefix} {cancel} <服务器>：取消倒计时（重启管理员）\n{prefix} {backup}：创建插件备份（全局管理员）"
+)
 FIELDS = set(
     "prefix add list remove modify players tps status servers restart logs sync import help id player user old_player page pages total entries owner result server error time action group detail count seconds".split()
 )
 FIELDS.update(SPARK_FIELDS)
+FIELDS.update(ALIASES)
+FIELDS.update({"alert_type", "alert_detail"})
 NAME = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -134,6 +156,7 @@ class Server:
     tps_source: str = "auto"
     spark_file: str = ".astrbot-spark-tps.txt"
     tps_mode: str = "spark"
+    restart_admins: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -145,6 +168,9 @@ class Group:
     admins: tuple[str, ...] = ()
     max_entries: int = 1
     origin: str = ""
+    whitelist_admins: tuple[str, ...] = ()
+    restart_admins: tuple[str, ...] | None = None
+    approval_required: bool = False
 
     @property
     def group_ids(self) -> tuple[str, ...]:
@@ -163,6 +189,33 @@ class Settings:
             if not isinstance(raw.get(key, {}), dict):
                 raise MCError(f"{key} 必须为 JSON 对象。")
         self.raw = raw
+        self.notification_max_attempts = positive(raw.get("notification_max_attempts", 5), "广播最大重试次数", 1, 100)
+        self.notification_retry_seconds = positive(
+            raw.get("notification_retry_seconds", 30), "广播重试基础间隔（秒）", 0, 3600
+        )
+        self.notification_max_age_hours = positive(
+            raw.get("notification_max_age_hours", 24), "广播有效期（小时）", 1, 720
+        )
+        self.background_retry_seconds = positive(
+            raw.get("background_retry_seconds", 5), "后台异常重试间隔（秒）", 1, 300
+        )
+        self.disk_warning_mb = positive(raw.get("disk_warning_mb", 512), "磁盘空间告警阈值（MB，0 关闭）", 0, 1048576)
+        self.backup_interval_hours = positive(
+            raw.get("backup_interval_hours", 0), "定时备份间隔（小时，0 关闭）", 0, 8760
+        )
+        self.backup_keep = positive(raw.get("backup_keep", 7), "备份保留数量", 1, 100)
+        self.logs_retention_days = positive(raw.get("logs_retention_days", 0), "日志保留天数（0 不限制）", 0, 3650)
+        self.logs_max_entries = positive(raw.get("logs_max_entries", 0), "日志最多保留条数（0 不限制）", 0, 10000000)
+        self.alert_consecutive = positive(raw.get("alert_consecutive", 3), "告警连续异常次数", 1, 100)
+        self.alert_cooldown = positive(raw.get("alert_cooldown", 900), "告警重复通知间隔（秒）", 10, 86400)
+        self.alert_tps_threshold = positive(raw.get("alert_tps_threshold", 15), "spark TPS 告警阈值", 1, 20)
+        self.query_cache_seconds = positive(raw.get("query_cache_seconds", 3), "查询缓存时间（秒，0 关闭）", 0, 60)
+        self.query_user_cooldown = positive(raw.get("query_user_cooldown", 0), "用户查询冷却（秒，0 关闭）", 0, 300)
+        self.query_group_cooldown = positive(raw.get("query_group_cooldown", 0), "群查询冷却（秒，0 关闭）", 0, 300)
+        self.query_concurrency = positive(raw.get("query_concurrency", 8), "RCON 查询并发上限", 1, 64)
+        self.restart_countdown = positive(raw.get("restart_countdown", 0), "重启前倒计时（秒，0 立即重启）", 0, 3600)
+        self.alerts_enabled = boolean(raw.get("alerts_enabled", False), "主动告警")
+        self.approval_required = boolean(raw.get("approval_required", False), "白名单申请审核")
         root = str(raw.get("server_root", "")).strip()
         self.root = Path(root).expanduser().resolve() if root else None
         self.page_size = positive(raw.get("page_size", 10), "每页数量", 1, 100)
@@ -188,8 +241,23 @@ class Settings:
         for prefix in self.prefixes:
             if prefix.startswith("/") or any(x.isspace() for x in prefix):
                 raise MCError("主指令不能包含 / 或空白。")
+        new_actions = {"diagnose", "backup", "cancel", "requests", "approve", "reject", "mine"}
+        reserved = {
+            value.casefold()
+            for key in ALIASES
+            if key not in new_actions or self.commands[key] != ALIASES[key]
+            for value in aliases(self.commands[key])
+        }
         for action in ALIASES:
             values = aliases(self.commands[action])
+            if action in new_actions and self.commands[action] == ALIASES[action]:
+                values = [value for value in values if value.casefold() not in reserved]
+                if not values:
+                    fallback = "mc_" + action
+                    while fallback.casefold() in reserved:
+                        fallback += "_"
+                    values = [fallback]
+                self.commands[action] = ",".join(values)
             if not values:
                 raise MCError(f"指令 {action} 至少需要一个别名。")
             for value in values:
@@ -249,6 +317,12 @@ class Settings:
                 or not (path / file_name).resolve().is_relative_to(path)
             ):
                 raise MCError("spark 指标文件必须是本服目录内的相对路径。")
+            owners = tuple(aliases(item.get("restart_admin_ids", [])))
+            if any(
+                ":" not in value or not all(value.rsplit(":", 1)) or any(ord(char) < 32 for char in value)
+                for value in owners
+            ):
+                raise MCError("服务器重启负责人应使用 平台实例ID:用户ID 格式。")
             self.servers[sid] = Server(
                 sid,
                 str(item.get("name", sid)),
@@ -261,6 +335,7 @@ class Settings:
                 source,
                 file_name,
                 mode,
+                owners,
             )
         self.groups: dict[str, Group] = {}
         bindings: set[tuple[str, str]] = set()
@@ -305,6 +380,9 @@ class Settings:
                 tuple(aliases(item.get("admin_ids", []))),
                 positive(item.get("max_entries_per_user", 1), "每人白名单上限", 1, 100),
                 str(item.get("broadcast_origin", "")),
+                tuple(aliases(item.get("whitelist_admin_ids", []))),
+                tuple(aliases(item["restart_admin_ids"])) if "restart_admin_ids" in item else None,
+                self.approval_required or boolean(item.get("approval_required", False), "本组申请审核"),
             )
 
         self.server_groups = {
@@ -339,6 +417,26 @@ class Settings:
             and actor.group in group.group_ids
             and (actor.admin is True or actor.user in group.admins)
         )
+
+    def can_manage(self, actor: Actor, group: Group) -> bool:
+        return self.is_admin(actor, group) or (
+            actor.platform == group.platform and actor.group in group.group_ids and actor.user in group.whitelist_admins
+        )
+
+    def can_restart(self, actor: Actor, group: Group, sid: str) -> bool:
+        if (
+            not isinstance(actor.user, str)
+            or not actor.user.strip()
+            or actor.platform != group.platform
+            or actor.group not in group.group_ids
+            or sid not in group.servers
+        ):
+            return False
+        if actor.admin is True:
+            return True
+        allowed = self.is_admin(actor, group) or actor.user in (group.restart_admins or ())
+        owners = self.servers[sid].restart_admins
+        return allowed and (not owners or f"{actor.platform}:{actor.user}" in owners)
 
     def extract(self, text: str) -> str | None:
         words = text.strip().split(maxsplit=1)

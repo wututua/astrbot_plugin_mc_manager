@@ -12,12 +12,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Actor, Group, MCError, Settings, player_name, positive, safe_text
 from .files import lookup_uuid, offline_uuid, read_spark_report, read_whitelist, write_whitelist
+from .operations import OperationsMixin
 from .rcon import Rcon
 from .spark import parse_spark_tps
 from .store import Store
 
 
-class Service:
+class Service(OperationsMixin):
     def __init__(
         self,
         settings: Settings,
@@ -43,6 +44,11 @@ class Service:
         self.initialization_lock = asyncio.Lock()
         self.last_status: dict[str, str] = {}
         self.closed = False
+        try:
+            self._init_operations(data_dir)
+        except BaseException:
+            self.store.close()
+            raise
 
     async def start(self):
         # A plugin reload loses the old TCP connection. Report an interrupted
@@ -64,23 +70,31 @@ class Service:
         self.resume()
 
     def resume(self):
-        if not self.closed and (self.background is None or self.background.done()):
-            for sid in self.settings.servers:
-                self.last_status.setdefault(sid, "探测中")
-            self.background = asyncio.create_task(self._loop(), name="mc-probe-sync-and-notify")
+        if self.closed:
+            return
+        for sid in self.settings.servers:
+            self.last_status.setdefault(sid, "探测中")
+        for attribute, coroutine, name in (
+            ("background", self._loop, "mc-probe-sync"),
+            ("delivery_task", self._delivery_loop, "mc-notifications"),
+            ("maintenance_task", self._maintenance_loop, "mc-maintenance"),
+        ):
+            task = getattr(self, attribute)
+            if task is None or task.done():
+                setattr(self, attribute, asyncio.create_task(coroutine(), name=name))
 
     async def pause(self):
-        task = self.background
-        if task is not None:
+        tasks = [task for task in (self.background, self.delivery_task, self.maintenance_task) if task is not None]
+        for task in tasks:
             task.cancel()
-            completion = asyncio.gather(task, return_exceptions=True)
-            try:
-                await asyncio.shield(completion)
-            except asyncio.CancelledError:
-                await completion
-                self.background = None
-                raise
-            self.background = None
+        completion = asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            await asyncio.shield(completion)
+        except asyncio.CancelledError:
+            await completion
+            raise
+        finally:
+            self.background = self.delivery_task = self.maintenance_task = None
         for lock in self.locks.values():
             async with lock:
                 pass
@@ -119,20 +133,20 @@ class Service:
         await asyncio.gather(*(self.query(sid, "status") for sid in self.settings.servers))
 
     async def _loop(self):
-        while True:
-            await self.probe_servers()
-            for group in self.settings.groups.values():
-                try:
-                    async with self.locks[group.id]:
-                        await self.ensure_group(group)
-                        await self.sync_group(group)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    for sid in group.servers:
-                        self.store.sync_result(sid, safe_text(exc, 500))
-            await self.deliver()
-            await asyncio.sleep(self.settings.sync_interval)
+        await self._worker("sync", self._sync_cycle, lambda: self.settings.sync_interval)
+
+    async def _sync_cycle(self):
+        await self.probe_servers()
+        for group in self.settings.groups.values():
+            try:
+                async with self.locks[group.id]:
+                    await self.ensure_group(group)
+                    await self.sync_group(group)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                for sid in group.servers:
+                    self.store.sync_result(sid, safe_text(exc, 500))
 
     async def ensure_group(self, group: Group):
         # No group/server locks are acquired here. Every related initial import
@@ -183,7 +197,7 @@ class Service:
                 self.store.audit(group, actor, "initial_import", "", f"保留合并 {len(additions)} 条原有白名单")
         return len(additions)
 
-    async def query(self, sid: str, kind: str) -> str:
+    async def _query_rcon(self, sid: str, kind: str) -> str:
         server = self.settings.servers[sid]
         if sid in self.restart_tasks:
             return "重启监控中"
@@ -202,9 +216,10 @@ class Service:
         command = server.tps_command if kind == "tps" else server.players_command
         try:
             async with self.server_locks[sid]:
-                async with self.rcon_factory(server, self.settings.rcon_timeout) as client:
-                    response = await client.command(command)
-                    result = safe_text(response, None) if native_tps else safe_text(response, 6000).strip()
+                async with self.query_slots:
+                    async with self.rcon_factory(server, self.settings.rcon_timeout) as client:
+                        response = await client.command(command)
+                        result = safe_text(response, None) if native_tps else safe_text(response, 6000).strip()
             if not result.strip():
                 result = "服务端返回空响应"
                 if kind == "tps" and not native_tps and "spark" in command.lower():
@@ -287,8 +302,13 @@ class Service:
                 messages.append(f"{server.name}：待同步（{reason}；文件成功写入时，下次启动将生效）")
         return "\n".join(messages)
 
-    def require_admin(self, actor: Actor, group: Group):
-        if not self.settings.is_admin(actor, group):
+    def require_admin(self, actor: Actor, group: Group, permission: str = "manage"):
+        allowed = (
+            self.settings.can_manage(actor, group)
+            if permission == "manage"
+            else (self.settings.is_admin(actor, group) or actor.user in (group.restart_admins or ()))
+        )
+        if not allowed:
             raise MCError("该功能仅允许 AstrBot 管理员或本群配置的管理员使用。")
 
     def targets(self, group: Group, selector: str = "") -> list[str]:
@@ -301,7 +321,7 @@ class Service:
 
     def allowed_entry(self, actor: Actor, group: Group, target: str) -> dict:
         row = self.store.find(group.id, target)
-        if (not row["owner"] or row["owner"] != actor.user) and not self.settings.is_admin(actor, group):
+        if (not row["owner"] or row["owner"] != actor.user) and not self.settings.can_manage(actor, group):
             raise MCError("只能修改或移除自己的白名单；历史导入条目需管理员处理。")
         return row
 
@@ -314,10 +334,17 @@ class Service:
     async def resolve_player(self, group: Group, name: str) -> tuple[str, str]:
         name = player_name(name)
         if self.settings.servers[group.servers[0]].online_mode:
-            return await asyncio.to_thread(lookup_uuid, name)
+            cached = self.uuid_cache.get(name.casefold())
+            if cached and cached[0] > time.monotonic():
+                return cached[1]
+            result = await asyncio.to_thread(lookup_uuid, name)
+            if len(self.uuid_cache) >= 4096:
+                self.uuid_cache.clear()
+            self.uuid_cache[name.casefold()] = (time.monotonic() + 3600, result)
+            return result
         return name, offline_uuid(name)
 
-    async def execute(self, actor: Actor, action: str, args: list[str]) -> str:
+    async def _execute_core(self, actor: Actor, action: str, args: list[str]) -> str:
         if self.closed:
             raise MCError("插件正在卸载。")
         group = self.settings.group_for(actor)
@@ -326,7 +353,7 @@ class Service:
         self.store.remember(group.id, actor.origin, actor.group)
         admin_actions = {"logs", "restart", "sync", "import"}
         if action in admin_actions:
-            self.require_admin(actor, group)
+            self.require_admin(actor, group, "restart" if action == "restart" else "manage")
         counts = {
             "help": (0, 0),
             "add": (1, 1),
@@ -351,7 +378,7 @@ class Service:
             return self.settings.render("servers", entries=entries)
         if action in {"players", "tps", "status"}:
             targets = self.targets(group, args[0] if args else "")
-            values = await asyncio.gather(*(self.query(sid, action) for sid in targets))
+            values = await asyncio.gather(*(self.cached_query(sid, action) for sid in targets))
             return "\n".join(
                 self.format_tps(s, v)
                 if action == "tps"
@@ -360,6 +387,8 @@ class Service:
             )
         if action == "restart":
             targets = self.targets(group, args[0])
+            if any(not self.settings.can_restart(actor, group, sid) for sid in targets):
+                raise MCError("没有目标服务器的重启权限，请核对本组管理员及服务器负责人设置。")
             if any(s in self.restart_tasks for s in targets):
                 raise MCError("目标服务器已有重启任务，请等待当前任务结束。")
             origin = self.broadcast_origin(group, actor)
@@ -437,9 +466,11 @@ class Service:
             values = {}
             if action == "add":
                 owned = [r for r in self.store.entries(group.id) if r["owner"] == actor.user]
-                if len(owned) >= group.max_entries and not self.settings.is_admin(actor, group):
+                if len(owned) >= group.max_entries and not self.settings.can_manage(actor, group):
                     raise MCError(f"每人最多添加 {group.max_entries} 条，请先修改或移除已有条目。")
                 name, identifier = await self.resolve_player(group, args[0])
+                if group.approval_required and not self.settings.can_manage(actor, group):
+                    return await self.submit_request(group, actor, "add", name, identifier)
                 try:
                     with self.store.transaction():
                         self.store.validate_player(group, name, identifier)
@@ -458,7 +489,7 @@ class Service:
                     with self.store.transaction():
                         deleted = self.store.db.execute(
                             "DELETE FROM entries WHERE scope=? AND id=? AND (owner=? OR ?=1)",
-                            (group.id, row["id"], actor.user, int(self.settings.is_admin(actor, group))),
+                            (group.id, row["id"], actor.user, int(self.settings.can_manage(actor, group))),
                         )
                         if deleted.rowcount != 1:
                             raise MCError("条目归属已变化或权限不足，请重新查看白名单。")
@@ -468,6 +499,8 @@ class Service:
                         self.store.mark_dirty(group.servers)
                 else:
                     name, identifier = await self.resolve_player(group, args[1])
+                    if group.approval_required and not self.settings.can_manage(actor, group):
+                        return await self.submit_request(group, actor, "modify", name, identifier, row)
                     try:
                         with self.store.transaction():
                             self.store.validate_player(group, name, identifier, exclude_id=row["id"])
@@ -479,7 +512,7 @@ class Service:
                                     group.id,
                                     row["id"],
                                     actor.user,
-                                    int(self.settings.is_admin(actor, group)),
+                                    int(self.settings.can_manage(actor, group)),
                                 ),
                             )
                             if updated.rowcount != 1:
@@ -514,13 +547,39 @@ class Service:
         deadline = start + self.settings.restart_timeout
         status = "failed"
         detail = ""
+        interrupted = False
         system = Actor(group.platform, group.group_id, "system", "重启监控", True)
         try:
+            countdown = self.settings.restart_countdown
+            if countdown:
+                self.store.job_phase(sid, "countdown", f"重启倒计时 {countdown} 秒")
+                for remaining in range(countdown, 0, -1):
+                    self.store.job_phase(sid, "countdown", f"{remaining} 秒后发送 stop")
+                    if remaining == countdown or remaining in {60, 30, 10, 5, 4, 3, 2, 1}:
+                        announcement = self.settings.render("restart_countdown", server=server.name, seconds=remaining)
+                        with self.store.transaction():
+                            self.store.enqueue(self.server_recipients(sid, group.id, origin), announcement)
+                            self.notification_wake.set()
+                        if self.settings.game_broadcast:
+                            try:
+                                async with self.server_locks[sid]:
+                                    async with self.rcon_factory(server, self.settings.rcon_timeout) as client:
+                                        await client.command(
+                                            "tellraw @a " + json.dumps({"text": announcement}, ensure_ascii=False)
+                                        )
+                            except Exception:
+                                pass
+                    await asyncio.sleep(1)
+            deadline = time.monotonic() + self.settings.restart_timeout
+            self.store.job_phase(sid, "stopping", "准备发送 stop")
+            self.invalidate_queries(sid)
             async with self.server_locks[sid]:
                 async with self.rcon_factory(server, self.settings.rcon_timeout) as client:
                     await self.readiness(client, server)
                     await client.stop()
+                    self.store.job_phase(sid, "waiting_stop", "已发送 stop，等待旧连接断开")
                     await client.wait_disconnect(max(0.01, deadline - time.monotonic()))
+            self.store.job_phase(sid, "waiting_start", "旧连接已断开，等待新 RCON")
             consecutive = 0
             last_error = "旧连接已断开，新服务器尚未就绪。"
             while time.monotonic() < deadline:
@@ -531,6 +590,7 @@ class Service:
                             async with self.rcon_factory(server, self.settings.rcon_timeout) as probe:
                                 await self.readiness(probe, server)
                     consecutive += 1
+                    self.store.job_phase(sid, "checking", f"启动就绪检查 {consecutive}/2")
                     if consecutive >= 2:
                         status = "success"
                         break
@@ -539,6 +599,7 @@ class Service:
                     last_error = safe_text(str(exc) or type(exc).__name__, 200)
             if status != "success":
                 raise MCError("等待服务器启动超时：" + last_error)
+            self.store.job_phase(sid, "syncing", "服务器已就绪，正在同步白名单")
             async with self.locks[group.id]:
                 await self.ensure_group(group)
                 await self.sync_group(group, force=True, allow_restart=sid)
@@ -558,8 +619,12 @@ class Service:
             text = self.settings.render("restart_success", server=server.name, seconds=seconds, detail=detail)
             self.last_status[sid] = "在线"
         except asyncio.CancelledError:
-            # Persisted 'running' jobs are reported as interrupted on reload.
-            raise
+            if sid not in self.cancel_requested:
+                interrupted = True
+                raise
+            status = "cancelled"
+            detail = "管理员在发送 stop 前取消倒计时"
+            text = self.settings.render("restart_cancelled", server=server.name)
         except Exception as exc:
             status = "failed"
             detail = safe_text(str(exc) or type(exc).__name__, 500)
@@ -567,30 +632,85 @@ class Service:
                 detail = "重启超时：旧连接未断开或新服务器未就绪。"
             text = self.settings.render("restart_failed", server=server.name, error=detail)
         finally:
-            current = self.restart_tasks.get(sid)
-            if current is asyncio.current_task():
+            self.invalidate_queries(sid)
+            if interrupted and self.restart_tasks.get(sid) is asyncio.current_task():
                 self.restart_tasks.pop(sid, None)
-        self.store.finish_job(
-            sid, status, detail, origin, text, recipients=self.server_recipients(sid, group.id, origin)
-        )
-        with self.store.transaction():
-            self.store.audit(group, system, "restart_" + status, sid, detail or "新 RCON 连续两次可执行查询")
-        await self.deliver()
+        try:
+            while True:
+                try:
+                    with self.store.transaction():
+                        self.store.finish_job(
+                            sid, status, detail, origin, text, recipients=self.server_recipients(sid, group.id, origin)
+                        )
+                        self.store.audit(
+                            group, system, "restart_" + status, sid, detail or "新 RCON 连续两次可执行查询"
+                        )
+                    break
+                except Exception as exc:
+                    self.worker_health["restart:" + sid] = {
+                        "state": "retrying",
+                        "last_success": "",
+                        "last_error": safe_text(exc, 500),
+                        "failures": 1,
+                    }
+                    await asyncio.sleep(self.settings.background_retry_seconds)
+            if "restart:" + sid in self.worker_health:
+                self.worker_health["restart:" + sid].update(
+                    state="waiting", last_success=datetime.now().astimezone().isoformat(timespec="seconds"), failures=0
+                )
+        finally:
+            if self.restart_tasks.get(sid) is asyncio.current_task():
+                self.restart_tasks.pop(sid, None)
+        self.notification_wake.set()
+        if status != "cancelled":
+            try:
+                await self.deliver()
+            except Exception as exc:
+                self.worker_health["notifications"] = {
+                    "state": "retrying",
+                    "last_success": "",
+                    "last_error": safe_text(exc, 500),
+                    "failures": 1,
+                }
 
     async def deliver(self):
         async with self.delivery_lock:
-            for item in self.store.outbox():
+            slots = asyncio.Semaphore(4)
+
+            async def send_one(item):
                 if item.get("scope", "") not in self.settings.groups:
                     self.store.delivered(item["id"], True)
-                    continue
+                    return
                 try:
-                    async with asyncio.timeout(15):
-                        success = await self.send(item["origin"], item["text"])
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    success = False
-                self.store.delivered(item["id"], bool(success))
+                    expired = (
+                        time.time() - datetime.fromisoformat(item["created"]).timestamp()
+                        >= self.settings.notification_max_age_hours * 3600
+                    )
+                except (ValueError, TypeError):
+                    expired = False
+                error = "通知已过期" if expired else "适配器返回失败或会话不可用"
+                success = False
+                if not expired:
+                    try:
+                        async with slots, asyncio.timeout(15):
+                            success = await self.send(item["origin"], item["text"])
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        error = safe_text(str(exc) or type(exc).__name__, 500)
+                self.store.delivered(
+                    item["id"],
+                    bool(success),
+                    error=error,
+                    retry_seconds=self.settings.notification_retry_seconds,
+                    max_attempts=1 if expired else self.settings.notification_max_attempts,
+                    max_age_hours=self.settings.notification_max_age_hours,
+                )
+
+            results = await asyncio.gather(*(send_one(item) for item in self.store.outbox()), return_exceptions=True)
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
 
     def snapshot(self) -> dict:
         dirty = self.store.dirty()
@@ -615,16 +735,27 @@ class Service:
                     "status": "重启中" if s.id in self.restart_tasks else self.last_status.get(s.id, "尚未探测"),
                     "pending": dirty.get(s.id, ""),
                     "directory": str(s.directory),
+                    **self.server_health.get(s.id, {}),
                 }
                 for s in self.settings.servers.values()
             ],
             "jobs": self.store.jobs(),
-            "notifications_pending": self.store.db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0],
+            "notifications_pending": self.store.db.execute(
+                "SELECT COUNT(*) FROM outbox WHERE state='pending'"
+            ).fetchone()[0],
+            "notifications_failed": self.store.db.execute(
+                "SELECT COUNT(*) FROM outbox WHERE state='failed'"
+            ).fetchone()[0],
+            "workers": self.worker_health,
         }
 
     async def close(self):
         self.closed = True
-        tasks = ([self.background] if self.background else []) + list(self.restart_tasks.values())
+        tasks = (
+            [task for task in (self.background, self.delivery_task, self.maintenance_task) if task is not None]
+            + list(self.restart_tasks.values())
+            + list(self.query_inflight.values())
+        )
         for task in tasks:
             task.cancel()
         if tasks:
