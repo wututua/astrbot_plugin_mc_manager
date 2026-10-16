@@ -8,11 +8,9 @@
 
 AstrBot 的 Minecraft Java 版群服管理插件，支持多群共享服务器、白名单同步、性能查询和网页管理。
 
-**AstrBot `>=4.28.0,<5` · Python `3.12+`**
+**v1.5.0 · AstrBot `>=4.28.0,<5` · Python `3.12+`**
 
 [![CI](https://github.com/wututua/astrbot_plugin_mc_manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wututua/astrbot_plugin_mc_manager/actions/workflows/ci.yml)
-
-运维增强、备份恢复、告警、批量管理与审核功能目前为 main 的未发布改动；现有 Releases 安装包尚未包含。
 
 [下载安装包](https://github.com/wututua/astrbot_plugin_mc_manager/releases/latest) · [问题反馈](https://github.com/wututua/astrbot_plugin_mc_manager/issues) · [更新日志](CHANGELOG.md)
 

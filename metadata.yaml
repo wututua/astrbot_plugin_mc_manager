@@ -1,8 +1,8 @@
 name: astrbot_plugin_mc_manager
-version: v1.4.0
+version: v1.5.0
 author: wututu
 display_name: Minecraft 群服管理
-desc: 支持多群共用服务器和白名单、按配置组隔离同步多台 Java 版 Minecraft 服务端，支持成员自助管理、玩家与 TPS 查询、管理员重启监控和广播、审计日志以及 AstrBot 管理页面。
-short_desc: 多群共享服务器与白名单、玩家和 TPS 查询、重启监控及网页管理
+desc: 支持多群共用服务器和白名单、按配置组隔离同步多台 Java 版 Minecraft 服务端，支持成员自助管理、玩家与 TPS 查询、管理员重启监控和广播、审计日志、诊断与数据备份恢复、告警、可选审核和 AstrBot 网页批量管理。
+short_desc: 多群共享白名单、性能查询、重启监控、备份恢复及网页运维
 astrbot_version: ">=4.28.0,<5"
 repo: https://github.com/wututua/astrbot_plugin_mc_manager

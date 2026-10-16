@@ -8,7 +8,7 @@ body:
     id: versions
     attributes:
       label: AstrBot 与插件版本
-      placeholder: AstrBot 4.29.0 / 插件 v1.4.0 或 main 提交号
+      placeholder: AstrBot 4.29.0 / 插件 v1.5.0 或 main 提交号
     validations:
       required: true
   - type: textarea
