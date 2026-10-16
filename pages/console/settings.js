@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 const copy = value => JSON.parse(JSON.stringify(value));
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const list = value => Array.isArray(value) ? value.map(String) : String(value || '').split(/[,，\r\n]+/).map(v => v.trim()).filter(Boolean);
+const serverIds = value => (Array.isArray(value) ? value : [value]).flatMap(item => String(item ?? '').split(/[,，\r\n]+/)).map(item => item.trim()).filter(Boolean);
 const ranges = { page_size: [1, 100], sync_interval: [5, 3600], rcon_timeout: [1, 30], restart_timeout: [5, 3600], poll_interval: [1, 30], spark_file_max_age: [3, 300], rcon_port: [1, 65535], max_entries_per_user: [1, 100] };
 Object.assign(ranges, {"notification_max_attempts":[1,100],"notification_retry_seconds":[0,3600],"notification_max_age_hours":[1,720],"background_retry_seconds":[1,300],"disk_warning_mb":[0,1048576],"backup_interval_hours":[0,8760],"backup_keep":[1,100],"logs_retention_days":[0,3650],"logs_max_entries":[0,10000000],"alert_consecutive":[1,100],"alert_cooldown":[10,86400],"alert_tps_threshold":[1,20],"query_cache_seconds":[0,60],"query_user_cooldown":[0,300],"query_group_cooldown":[0,300],"query_concurrency":[1,64],"restart_countdown":[0,3600]});
 const entityRequired = new Set(['id', 'name', 'directory', 'rcon_host', 'rcon_port', 'platform_id', 'group_id', 'max_entries_per_user', 'tps_mode', 'tps_command', 'players_command', 'spark_file']);
@@ -48,6 +49,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     }
     for (const key of ['commands', 'messages']) if (value[key] !== undefined && !isObject(value[key])) throw new Error(`${key} 必须是 JSON 对象。`);
     for (const group of value.groups || []) {
+      if (Array.isArray(group.server_ids) && group.server_ids.some(item => typeof item !== 'string' && !(typeof item === 'number' && Number.isInteger(item)))) throw new Error('服务器 ID 列表只能包含文本或整数，多个 ID 用逗号或换行分隔。');
       if (group.group_id != null && !Array.isArray(group.group_id) && !['string', 'number'].includes(typeof group.group_id)) throw new Error('群号必须是文本、数字或群号列表。');
       for (const key of ['server_ids', 'admin_ids']) if (group[key] !== undefined && !Array.isArray(group[key]) && typeof group[key] !== 'string') throw new Error(`${key} 必须是账号/ID 列表。`);
     }
@@ -63,7 +65,7 @@ export function createSettings({ api, work, notice, output, confirmAction, refre
     result.groups = (result.groups || []).map(row => {
       const group = defaults(groupItems(), row);
       group.group_id = [...new Set(list(group.group_id))].join(",");
-      group.server_ids = list(group.server_ids);
+      group.server_ids = serverIds(group.server_ids);
       group.admin_ids = list(group.admin_ids);
       return group;
     });

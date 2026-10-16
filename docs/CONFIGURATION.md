@@ -101,3 +101,9 @@
 | `sync` / `import` / `error` | 同步：`{sync}`；导入：`{count}`、`{sync}`；错误：`{error}` |
 
 模板只支持变量替换；字面花括号写为 `{{`、`}}`，不支持表达式或属性访问。完整默认文本见[默认配置](../config.default.json)，TPS 指标详见 [TPS_VARIABLES.md](TPS_VARIABLES.md)。
+
+## 服务器绑定列表的填写
+
+群配置的 server_ids 推荐使用独立数组，例如 `"server_ids": ["server1", "server2"]`。服务器唯一 ID 与服务端目录名是不同字段。原生配置列表建议每项添加一个 ID。
+
+main 中的修复兼容 `"server_ids": ["server1,server2"]`、中文逗号和换行，网页保存时会规范为独立数组。v1.5.0 原安装包遇到单项内逗号可能提示“服务器 server1,server2 不存在”，可在高级 JSON 中改为上述独立数组，应用到表单后保存；也可编辑群聊并重新勾选对应服务器。真正未知的 ID 和同组重复 ID 仍会拒绝保存。

@@ -1013,3 +1013,70 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         _, handlers, results = await self.dispatch_command("/mc")
         self.assertEqual(len(handlers), 1)
         self.assertIn("配置待修正", results[0])
+
+    async def test_compact_server_binding_save_persists_canonical_ids_only(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        (self.root / "server2").mkdir()
+        (self.root / "server2/whitelist.json").write_text("[]", encoding="utf-8")
+        raw["servers"].append(
+            {"id": "server2", "directory": "server2", "rcon_port": 25576, "rcon_password": "test-only"}
+        )
+        raw["groups"][0]["server_ids"] = ["server1,server2"]
+        raw["groups"][0]["admin_ids"] = ["member,admin"]
+        with (
+            self.bound_request({"config": raw, "revision": self.plugin.config_revision}),
+            patch.object(
+                self.main,
+                "Service",
+                lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+            ),
+        ):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(self.plugin.config["groups"][0]["server_ids"], ["server1", "server2"])
+        self.assertEqual(self.saved["groups"][0]["server_ids"], ["server1", "server2"])
+        self.assertEqual(self.plugin.settings.groups["g1"].servers, ("server1", "server2"))
+        self.assertEqual(self.plugin.config["groups"][0]["admin_ids"], ["member,admin"])
+        self.assertFalse(
+            self.plugin.settings.is_admin(self.main.Actor("bot", "100", "admin"), self.plugin.settings.groups["g1"])
+        )
+
+    async def test_repair_compact_binding_keeps_existing_entry_owner_and_number(self):
+        actor = self.main.Actor("bot", "100", "member")
+        await self.plugin.service.execute(actor, "add", ["Steve"])
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        (self.root / "server2").mkdir()
+        (self.root / "server2/whitelist.json").write_text("[]", encoding="utf-8")
+        raw["servers"].append(
+            {"id": "server2", "directory": "server2", "rcon_port": 25576, "rcon_password": "test-only"}
+        )
+        raw["groups"][0]["server_ids"] = ["missing_server"]
+        await self.recovery_plugin(raw)
+        self.assertIn("missing_server", self.plugin.config_error)
+        raw["groups"][0]["server_ids"] = ["server1,server2"]
+        with (
+            self.bound_request({"config": raw, "revision": self.plugin.config_revision}),
+            patch.object(
+                self.main,
+                "Service",
+                lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+            ),
+        ):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(self.plugin.config_error, "")
+        self.assertEqual(self.plugin.config["groups"][0]["server_ids"], ["server1", "server2"])
+        entries = self.plugin.service.store.entries("g1")
+        self.assertEqual([(entry["id"], entry["name"], entry["owner"]) for entry in entries], [(1, "Steve", "member")])
+
+    async def test_unknown_compact_binding_is_rejected_without_rebinding_saved_data(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["groups"][0]["server_ids"] = ["server1,missing_server"]
+        original = self.plugin.service
+        with self.bound_request({"config": raw, "revision": self.plugin.config_revision}):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("missing_server", response.body.decode())
+        self.assertIs(self.plugin.service, original)
+        self.assertEqual(self.plugin.config["groups"][0]["server_ids"], ["server1"])
+        self.assertEqual([row["server"] for row in original.store.db.execute("SELECT * FROM bindings")], ["server1"])

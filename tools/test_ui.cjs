@@ -59,6 +59,11 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
         bindings: keepHistory ? clone(bindings) : { groups: [], servers: [] },
         error: '第 1 条群绑定缺少：平台实例 ID（platform_id，填 /sid 的 Bot ID）、群号（group_id）。请编辑该群绑定，或删除未使用的空白项。' }));
     };
+    window.prepareCompactServerIds = () => {
+      const broken = clone(config);
+      broken.groups[0].server_ids = ['server1,server2'];
+      sessionStorage.setItem('mc-test-recovery', JSON.stringify({config:broken,bindings:clone(bindings),error:'服务器 server1,server2 不存在。'}));
+    };
     const backend = {
       ready: async () => ({ plugin_name: 'astrbot_plugin_mc_manager' }),
       apiGet: async (endpoint, params) => {
@@ -428,6 +433,23 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.setViewportSize({ width: 1280, height: 1000 });
     await clickTab('connections');
 
+    // Recover a native list item containing two comma-separated server IDs.
+    await page.evaluate(() => window.prepareCompactServerIds());
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('config-state').textContent === '配置待修正');
+    assert.deepEqual(JSON.parse(await page.locator('#config-editor').inputValue()).groups[0].server_ids,['server1','server2']);
+    assert.equal((await page.locator('#configured-servers [data-id="server1"]').innerText()).includes('尚未绑定群'),false);
+    assert.equal((await page.locator('#configured-servers [data-id="server2"]').innerText()).includes('尚未绑定群'),false);
+    const compactGroup = await page.evaluate(() => window.latestConfig.groups[0].id);
+    await page.locator('#configured-groups [data-id="'+compactGroup+'"] button').filter({hasText:'编辑群聊'}).click();
+    assert.equal(await page.locator('#entity-fields input[value="server1"]').isChecked(),true);
+    assert.equal(await page.locator('#entity-fields input[value="server2"]').isChecked(),true);
+    assert.equal(await page.locator('#entity-fields input[value="server3"]').isChecked(),false);
+    await page.locator('#entity-apply').click();
+    await save();
+    assert.deepEqual(await page.evaluate(() => window.latestConfig.groups[0].server_ids),['server1','server2']);
+    assert.equal(await page.locator('#configuration-error').isHidden(),true);
+
     // First install: setup uses form controls with no JSON knowledge required.
     await page.evaluate(() => window.resetEmptyConfig());
     await page.locator('#reload-config').click();
@@ -479,7 +501,7 @@ const chromiumExecutable = process.env.MC_TEST_CHROMIUM;
     await page.locator('#entity-apply').click(); await save();
     assert.equal(await page.locator('#configuration-error').isHidden(), true);
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, blue responsive layout, provided logo, diagnostics, backup/download/restore, queue retry, approval, retention, bulk preview/transfer and exports, native/spark TPS modes and templates, JSON, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
+    console.log('Browser checks passed (' + (officialSdkRoot || 'mock SDK') + '): multi-chat/shared-server forms, overlap validation, passwords, admins, common settings, commands/menu/broadcasts, blue responsive layout, provided logo, diagnostics, backup/download/restore, queue retry, approval, retention, bulk preview/transfer and exports, native/spark TPS modes and templates, JSON, compact server-ID list repair, draft persistence, conflicts, removal, desktop/mobile and existing operations.');
   } catch (error) {
     const failureDir = path.join(root, '.research', 'ui-failures'); fs.mkdirSync(failureDir, { recursive: true });
     await page.screenshot({ path: path.join(failureDir, 'browser-failure.png'), fullPage: true });

@@ -416,6 +416,8 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                     if old and (old["platform"], old["group_id"]) != (group["platform_id"], group["group_id"]):
                         group["broadcast_origin"] = ""
                 settings = Settings(raw)
+                for group in raw.get("groups", []):
+                    group["server_ids"] = list(settings.groups[str(group["id"])].servers)
                 candidate = Service(settings, self.data_dir, self._send, reserve_scopes=False)
                 old_config = copy.deepcopy(dict(self.config))
                 paused = False

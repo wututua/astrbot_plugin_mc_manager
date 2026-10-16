@@ -113,6 +113,25 @@ def aliases(value: Any) -> list[str]:
     return [x.strip() for x in str(value).replace("，", ",").split(",") if x.strip()]
 
 
+def server_ids(value: Any) -> tuple[str, ...]:
+    """Normalize only server references; commas inside account IDs remain literal."""
+    if value is None:
+        return ()
+    values = value if isinstance(value, list) else [value]
+    result = []
+    for item in values:
+        if not isinstance(item, (str, int)) or isinstance(item, bool):
+            raise MCError("服务器 ID 必须是文本或 ID 列表，多个 ID 用逗号或换行分隔。")
+        for token in re.split(r"[,，\r\n]+", str(item)):
+            token = token.strip()
+            if not token:
+                continue
+            if not ID.fullmatch(token):
+                raise MCError("服务器 ID 格式无效；请填写服务器唯一 ID，多个 ID 用逗号或换行分隔。")
+            result.append(token)
+    return tuple(result)
+
+
 def group_ids(value: Any) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -344,7 +363,7 @@ class Settings:
             platform = str(item.get("platform_id") or "").strip()
             identities = group_ids(item.get("group_id"))
             group_id = ",".join(identities)
-            servers = tuple(aliases(item.get("server_ids", [])))
+            servers = server_ids(item.get("server_ids", []))
             missing = []
             if not gid.strip():
                 missing.append("群配置唯一 ID（id）")
@@ -368,7 +387,9 @@ class Settings:
                 raise MCError(f"群 {gid} 的服务器集合为空或重复。")
             for sid in servers:
                 if sid not in self.servers:
-                    raise MCError(f"服务器 {sid} 不存在。")
+                    raise MCError(
+                        f"群 {gid} 绑定的服务器 ID {sid} 不存在；请先添加该服务器，或编辑群聊重新勾选服务器。"
+                    )
             if len({self.servers[s].online_mode for s in servers}) > 1:
                 raise MCError(f"群 {gid} 的服务器必须使用相同 UUID 模式。")
             bindings.update((platform, identity) for identity in identities)
