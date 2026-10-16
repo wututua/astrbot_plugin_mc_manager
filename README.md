@@ -1,7 +1,7 @@
 # Minecraft 群服管理
 
 <p align="center">
-  <a href="https://sg1s3.ligzs.com/tu-oss/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_2026-10-16_020043_580.png">
+  <a href="https://sg1s3.ligzs.com/tu-oss/logo.png">
     <img src="logo.png" alt="Minecraft 群服管理 Logo" width="128" height="128">
   </a>
 </p>
