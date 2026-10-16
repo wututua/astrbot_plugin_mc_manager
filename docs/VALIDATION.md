@@ -16,7 +16,9 @@
 
 Ruff、Python 编译、JavaScript 语法、默认配置与表单 schema 一致性、Markdown 相对链接/JSON 示例、凭据模式检查通过。Linux 启动模板通过 Git Bash 的 bash -n 检查。固定 AstrBot wheel 下载提取工具已实际获取 4.29.0，最终 4.29.0 回归与浏览器检查使用该新提取源码。
 
-CI 已配置 Windows/Linux、两套框架、两套 SDK 和 Java 8/17/21 矩阵，权限仅 contents:read；本地检查不代表 GitHub Actions 已执行，也不代表已在 Linux 或实际 Minecraft 核心中完成联调。实机记录见[环境矩阵](COMPATIBILITY_MATRIX.md)。
+2026-10-16 已实际完成 [GitHub Actions 线上验证](https://github.com/wututua/astrbot_plugin_mc_manager/actions/runs/38884520970)：9 个任务全部通过。Windows/Linux × AstrBot 4.28.0/4.29.0 四个组合各 262 项测试通过，0 跳过；两套 SDK 网页检查通过；Temurin Java 8/17/21 三个组合各 8 项采集器与文件检查通过，0 跳过。首轮检查发现的 Java 8 编译输出目录和 Windows 毫秒级模拟超时问题已修正。
+
+该次 Linux 实际镜像为 Ubuntu 24.04，工作流已固定此版本以保持环境一致；权限仅 contents:read，未执行版本发布。以上仍是框架隔离、模拟连接及真实 JVM/SQLite 检查，不等同于运行实际 Minecraft 核心。实机记录见[环境矩阵](COMPATIBILITY_MATRIX.md)，最新运行结果以 README 的 CI 徽章为准。
 
 ## v1.4.0 蓝色界面与 TPS 查询方式
 

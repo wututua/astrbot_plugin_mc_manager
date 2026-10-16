@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         astrbot: ["4.28.0", "4.29.0"]
     runs-on: ${{ matrix.os }}
     env:
@@ -52,7 +52,7 @@ jobs:
   browser:
     name: Web · AstrBot ${{ matrix.astrbot }}
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +91,7 @@ jobs:
   agent:
     name: Agent · Java ${{ matrix.java }}
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

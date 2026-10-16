@@ -8,8 +8,8 @@
 | AstrBot 4.28.1 / 4.28.2 | 历史接口检查 | 本轮完整回归以验证记录为准 |
 | Java agent | 真实 Java 8 JVM、公开 spark API 形状一致的测试类 | 未替代实际核心与 spark 版本组合 |
 | 网页 | Chromium、320/390/768/1024/1440 宽度、官方两套 SDK | 后端和父页面使用模拟数据；备份等另有真实 SQLite/官方 Web API 集成检查 |
-| Windows / Linux | CI 已配置两套框架的 Python 回归矩阵 | 工作流提交到 GitHub 并运行后，按实际结果填写；配置工作流不等于已通过 |
-| Java 8 / 17 / 21 | CI 已配置 agent 构建及 API 测试矩阵 | 当前执行结果见 CI 与验证记录 |
+| Windows / Linux | GitHub Actions 四个组合各 262 项测试通过，0 跳过 | Linux 实际镜像 Ubuntu 24.04；框架接口和模拟连接验证 |
+| Java 8 / 17 / 21 | Temurin 三个组合各 8 项采集器与文件检查通过 | 包含构建和真实 JVM 采样，使用测试 spark API |
 
 真实服务端验证记录建议按下面格式补充：
 
