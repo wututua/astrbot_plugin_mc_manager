@@ -65,7 +65,8 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.startup_fail = False
         self.service = Service(Settings(copy.deepcopy(self.raw)), self.root / "data", send, FakeRcon)
         self.service.settings.poll_interval = 0.001
-        self.service.settings.restart_timeout = 0.05
+        # Hosted Windows timers and file flushes can exceed a few milliseconds.
+        self.service.settings.restart_timeout = 1
         self.user = Actor("bot", "100", "user", "member", False, "bot:GroupMessage:100")
         self.admin = Actor("bot", "100", "admin", "admin", False, self.user.origin)
         self.manager = Actor("bot", "100", "manager", "manager", False, self.user.origin)

@@ -122,6 +122,7 @@ class SparkAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             classes = directory / "classes"
+            classes.mkdir()
             source = ROOT / "tests" / "java"
             javac = shutil.which("javac")
             compiler = [javac, "-source", "8", "-target", "8"] if javac else ["java", "-jar", str(COMPILER), "-1.8"]

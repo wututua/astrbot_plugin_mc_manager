@@ -55,7 +55,8 @@ class SharingTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.startup_fail = False
         self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon)
         self.service.settings.poll_interval = 0.001
-        self.service.settings.restart_timeout = 0.1
+        # Hosted Windows timers and file flushes can exceed a few milliseconds.
+        self.service.settings.restart_timeout = 1
         self.a = Actor("bot", "100", "owner1", origin="bot:GroupMessage:100")
         self.a2 = Actor("bot", "101", "owner1", origin="bot:GroupMessage:101")
         self.b = Actor("bot", "200", "owner2", origin="bot:GroupMessage:200")
