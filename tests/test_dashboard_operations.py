@@ -36,6 +36,32 @@ class DashboardOperationsTests(unittest.IsolatedAsyncioTestCase):
             response = await self.plugin.page_action()
         self.assertEqual(response.status_code, 200, response.body)
 
+    async def test_restore_old_collector_settings_uses_rcon_configuration(self):
+        legacy = json.loads(json.dumps(dict(self.plugin.config)))
+        legacy["spark_file_max_age"] = 10
+        legacy["servers"][0].update(tps_source="file", spark_file="old-report.txt")
+        backup = await self.plugin.service.backups.create(legacy)
+        code, preview, message = await self.operation({"action": "restore_preview", "name": backup["name"]})
+        self.assertEqual(code, 200, message)
+        with patch.object(
+            self.main,
+            "Service",
+            lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+        ):
+            code, _, message = await self.operation(
+                {
+                    "action": "restore_apply",
+                    "token": preview["token"],
+                    "revision": preview["revision"],
+                    "confirmed": True,
+                }
+            )
+        self.assertEqual(code, 200, message)
+        self.assertNotIn("spark_file_max_age", self.plugin.config)
+        self.assertNotIn("spark_file", self.plugin.config["servers"][0])
+        self.assertNotIn("tps_source", self.plugin.service.settings.raw["servers"][0])
+        self.assertIs(self.plugin.service.logger, self.plugin.logger)
+
     async def test_operational_routes_require_dashboard_auth(self):
         for payload in (
             {"action": "backups"},
@@ -68,6 +94,7 @@ class DashboardOperationsTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
         self.assertEqual(code, 200, message)
+        self.assertIs(self.plugin.service.logger, self.plugin.logger)
         self.assertIn("before-restore", [row["label"] for row in self.plugin.service.backups.list()])
         entries = self.plugin.service.store.entries("g1")
         self.assertEqual([(row["id"], row["name"], row["owner"]) for row in entries], [(1, "Steve", "dashboard:admin")])

@@ -20,6 +20,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 from .config import MCError, Settings, player_name
+from .message_catalog import text as message_text
 
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_DATABASE = 128 * 1024 * 1024
@@ -35,7 +36,7 @@ def validate_database(path: Path) -> dict[str, int]:
     with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as connection:
         connection.execute("PRAGMA trusted_schema=OFF")
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-            raise MCError("备份数据库完整性检查未通过。")
+            raise MCError(message_text("error_backups_001"))
         objects = connection.execute("SELECT type,name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").fetchall()
         allowed = {
             "scopes",
@@ -53,7 +54,7 @@ def validate_database(path: Path) -> dict[str, int]:
             "alerts",
         }
         if any(kind in {"view", "trigger"} or (kind == "table" and name not in allowed) for kind, name in objects):
-            raise MCError("备份数据库包含不支持的对象。")
+            raise MCError(message_text("error_backups_002"))
         required = {
             "scopes": {"id", "platform", "group_id", "next_id"},
             "bindings": {"server", "scope"},
@@ -63,10 +64,10 @@ def validate_database(path: Path) -> dict[str, int]:
         for table, columns in required.items():
             actual = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             if not columns <= actual:
-                raise MCError("备份数据库结构不受支持：" + table)
+                raise MCError(message_text("error_backups_011", table=table))
         scopes = {row[0]: row[1] for row in connection.execute("SELECT id,next_id FROM scopes")}
         if any(not isinstance(value, int) or not 1 <= value <= 2**63 - 1 for value in scopes.values()):
-            raise MCError("备份中的后续编号无效。")
+            raise MCError(message_text("error_backups_003"))
         for scope, index, name, identifier, owner in connection.execute("SELECT scope,id,name,uuid,owner FROM entries"):
             player_name(name)
             uuid.UUID(identifier)
@@ -78,12 +79,12 @@ def validate_database(path: Path) -> dict[str, int]:
                 or not isinstance(scopes[scope], int)
                 or scopes[scope] <= index
             ):
-                raise MCError("备份中的固定编号、归属或配置组数据无效。")
+                raise MCError(message_text("error_backups_012"))
         for column in ("id", "lower(name)", "lower(uuid)"):
             if connection.execute(
                 f"SELECT 1 FROM entries GROUP BY scope,{column} HAVING COUNT(*)>1 LIMIT 1"
             ).fetchone():
-                raise MCError("备份中存在重复白名单条目。")
+                raise MCError(message_text("error_backups_013"))
         return {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in ("scopes", "entries", "logs")
@@ -95,7 +96,7 @@ class BackupManager:
         data_dir = data_dir.resolve()
         self.directory = data_dir / "backups"
         if self.directory.is_symlink():
-            raise MCError("备份目录不能是链接。")
+            raise MCError(message_text("error_backups_004"))
         self.directory.mkdir(parents=True, exist_ok=True)
         self.database = data_dir / "mc.sqlite3"
         self.keep = keep
@@ -104,10 +105,10 @@ class BackupManager:
 
     def path(self, name: str) -> Path:
         if not isinstance(name, str) or not NAME.fullmatch(name):
-            raise MCError("备份文件名无效。")
+            raise MCError(message_text("error_backups_005"))
         path = self.directory / name
         if path.is_symlink() or path.resolve().parent != self.directory.resolve():
-            raise MCError("备份文件路径无效。")
+            raise MCError(message_text("error_backups_006"))
         return path
 
     def list(self) -> list[dict]:
@@ -144,12 +145,12 @@ class BackupManager:
             ):
                 source.backup(destination, pages=128, sleep=0.01)
             if database.stat().st_size > MAX_DATABASE:
-                raise MCError("插件数据库超过备份大小限制，请先导出并清理旧日志。")
+                raise MCError(message_text("error_backups_014"))
             counts = validate_database(database)
             db_data = database.read_bytes()
             config_data = json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8")
             if len(config_data) > 1024 * 1024:
-                raise MCError("配置超过 1 MB。")
+                raise MCError(message_text("error_backups_015"))
             manifest = {
                 "format": 1,
                 "plugin": "astrbot_plugin_mc_manager",
@@ -164,7 +165,7 @@ class BackupManager:
                 archive.writestr("config.json", config_data)
                 archive.writestr("backup.json", json.dumps(manifest, ensure_ascii=False))
             if staged.stat().st_size > MAX_ARCHIVE:
-                raise MCError("压缩备份超过 32 MB，请先清理日志。")
+                raise MCError(message_text("error_backups_016"))
             os.chmod(staged, 0o600)
             os.replace(staged, self.path(name))
         for old in self.list()[self.keep :]:
@@ -183,24 +184,24 @@ class BackupManager:
     def download(self, name: str) -> dict:
         path = self.path(name)
         if not path.is_file() or path.stat().st_size > MAX_ARCHIVE:
-            raise MCError("备份不存在或超过大小限制。")
+            raise MCError(message_text("error_backups_007"))
         data = path.read_bytes()
         return {"name": name, "sha256": digest(data), "content_base64": base64.b64encode(data).decode("ascii")}
 
     def inspect(self, data: bytes) -> tuple[dict, bytes, dict]:
         if len(data) > MAX_ARCHIVE:
-            raise MCError("备份压缩包不能超过 32 MB。")
+            raise MCError(message_text("error_backups_008"))
         try:
             with ZipFile(io.BytesIO(data)) as archive:
                 if len(archive.namelist()) != 3 or set(archive.namelist()) != MEMBERS:
-                    raise MCError("备份仅允许 database.sqlite3、config.json、backup.json 三个文件。")
+                    raise MCError(message_text("error_backups_021"))
                 sizes = {info.filename: info.file_size for info in archive.infolist()}
                 if (
                     sizes["database.sqlite3"] > MAX_DATABASE
                     or sizes["config.json"] > 1024 * 1024
                     or sizes["backup.json"] > 16384
                 ):
-                    raise MCError("备份解压大小超过限制。")
+                    raise MCError(message_text("error_backups_022"))
                 manifest = json.loads(archive.read("backup.json"))
                 if (
                     not isinstance(manifest, dict)
@@ -209,12 +210,12 @@ class BackupManager:
                     or manifest.get("plugin") != "astrbot_plugin_mc_manager"
                     or not isinstance(manifest.get("sha256"), dict)
                 ):
-                    raise MCError("这不是受支持的 MC 管理插件数据备份。")
+                    raise MCError(message_text("error_backups_023"))
                 raw_config = archive.read("config.json")
                 database = archive.read("database.sqlite3")
             for name, contents in (("database.sqlite3", database), ("config.json", raw_config)):
                 if manifest["sha256"].get(name) != digest(contents):
-                    raise MCError("备份校验值不一致。")
+                    raise MCError(message_text("error_backups_024"))
             config = json.loads(raw_config)
             Settings(config)
             with tempfile.TemporaryDirectory(prefix=".inspect-", dir=self.directory) as temporary:
@@ -225,7 +226,7 @@ class BackupManager:
         except MCError:
             raise
         except (OSError, ValueError, KeyError, TypeError, AttributeError, BadZipFile, sqlite3.DatabaseError):
-            raise MCError("备份格式、数据库或校验信息无效。") from None
+            raise MCError(message_text("error_backups_017")) from None
 
     def preview(self, *, name: str = "", data: str = "") -> dict:
         for token, (path, expires, _) in list(self.pending.items()):
@@ -233,14 +234,14 @@ class BackupManager:
                 path.unlink(missing_ok=True)
                 del self.pending[token]
         if len(self.pending) >= 5:
-            raise MCError("待确认恢复过多，请稍后再试。")
+            raise MCError(message_text("error_backups_009"))
         if data:
             if not isinstance(data, str) or len(data) > MAX_ARCHIVE * 4 // 3 + 8:
-                raise MCError("上传的备份超过大小限制。")
+                raise MCError(message_text("error_backups_018"))
             try:
                 contents = base64.b64decode(data, validate=True)
             except (ValueError, TypeError):
-                raise MCError("备份上传编码无效。") from None
+                raise MCError(message_text("error_backups_025")) from None
         else:
             contents = base64.b64decode(self.download(name)["content_base64"])
         config, _, counts = self.inspect(contents)
@@ -264,14 +265,14 @@ class BackupManager:
     def consume(self, token: str) -> tuple[dict, bytes]:
         item = self.pending.pop(token, None)
         if not item:
-            raise MCError("恢复预览已失效，请重新预览。")
+            raise MCError(message_text("error_backups_010"))
         path, expires, expected = item
         try:
             if expires < time.time():
-                raise MCError("恢复预览已过期。")
+                raise MCError(message_text("error_backups_019"))
             data = path.read_bytes()
             if digest(data) != expected:
-                raise MCError("预览后的备份发生变化。")
+                raise MCError(message_text("error_backups_020"))
             config, database, _ = self.inspect(data)
             return config, database
         finally:

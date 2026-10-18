@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 import math
 import os
 import secrets
@@ -18,11 +17,11 @@ from pathlib import Path
 
 from .backups import BackupManager
 from .config import Actor, MCError, player_name, positive
-from .files import read_spark_report, read_whitelist
-from .spark import parse_spark_tps
+from .files import read_whitelist
+from .message_catalog import text as message_text
+from .monitoring import QueryInfo, QueryResult, finish_query, list_result, parse_players
+from .performance import parse_performance, performance_values
 from .text import safe_text
-
-logger = logging.getLogger(__name__)
 
 
 def utc_now() -> str:
@@ -63,6 +62,7 @@ class OperationsMixin:
         self.notification_wake = asyncio.Event()
         self.maintenance_task = None
         self.query_slots = asyncio.Semaphore(self.settings.query_concurrency)
+        self.tps_capabilities = {}
         self.query_cache = {}
         self.query_inflight = {}
         self.user_queries = {}
@@ -92,9 +92,11 @@ class OperationsMixin:
                 failures += 1
                 delay = min(300, self.settings.background_retry_seconds * 2 ** min(failures - 1, 6))
                 health.update(
-                    state="retrying", last_error=safe_text(str(exc) or type(exc).__name__, 500), failures=failures
+                    state="retrying",
+                    last_error=safe_text(self.settings.localize(exc) or type(exc).__name__, 500),
+                    failures=failures,
                 )
-                logger.exception("MC %s 后台任务失败，%s 秒后重试", name, delay)
+                self.logger.exception("MC %s 后台任务失败，%s 秒后重试", name, delay)
             if name == "notifications" and not failures:
                 try:
                     async with asyncio.timeout(delay):
@@ -114,17 +116,40 @@ class OperationsMixin:
 
     async def query(self, sid: str, kind: str) -> str:
         started = time.monotonic()
-        result = await self._query_rcon(sid, kind)
+        server = self.settings.servers[sid]
+        log_wait = server.spark_log_wait_seconds if kind == "tps" and server.spark_log_fallback else 0
+        deadline = self.settings.query_timeout_seconds or max(5, 2 * self.settings.rcon_timeout + 2 + log_wait)
+        try:
+            async with asyncio.timeout(deadline):
+                result = await self._query_rcon(sid, kind)
+        except TimeoutError:
+            text = message_text("query_timeout", seconds=f"{deadline:g}")
+            result = QueryResult(text, QueryInfo(error=text))
+            if kind == "status":
+                self.last_status[sid] = "查询超时，状态未确认"
+        result = finish_query(result, started)
         health = self.server_health.setdefault(sid, {})
-        health[kind + "_checked"] = utc_now()
-        health[kind + "_latency_ms"] = round((time.monotonic() - started) * 1000, 1)
+        for selected in ("status", "players") if kind in {"status", "players"} else (kind,):
+            health[selected + "_checked"] = utc_now()
+            health[selected + "_latency_ms"] = round((time.monotonic() - started) * 1000, 1)
+            if isinstance(result, QueryResult):
+                health[selected + "_source"] = result.info.source
+                health[selected + "_command"] = result.info.command
+                health[selected + "_error"] = result.info.error
+        if kind in {"status", "players"} and isinstance(result, QueryResult):
+            health.update(
+                parse_players(result.info.raw if not result.info.error else "", self.settings.tps_missing_value)
+            )
         return result
 
-    async def cached_query(self, sid: str, kind: str) -> str:
-        key = (sid, kind)
+    async def cached_query(self, sid: str, kind: str, fresh=False) -> str:
+        # Status and players use the same configured list command. Share the
+        # transport result while retaining each caller's presentation.
+        key = (sid, "players" if kind == "status" else kind)
         cached = self.query_cache.get(key)
-        if cached and cached[0] > time.monotonic():
-            return cached[1]
+        if not fresh and cached and cached[0] > time.monotonic():
+            result = cached[1].cached_copy() if isinstance(cached[1], QueryResult) else cached[1]
+            return list_result(result, kind)
         task = self.query_inflight.get(key)
         if task is None or task.done():
 
@@ -132,7 +157,10 @@ class OperationsMixin:
                 try:
                     value = await self.query(sid, kind)
                     ttl = self.settings.query_cache_seconds
-                    if value.startswith("离线或 RCON"):
+                    if isinstance(value, QueryResult):
+                        if value.info.error:
+                            ttl = min(ttl, 1)
+                    elif value.startswith("离线或 RCON"):
                         ttl = min(ttl, 1)
                     if ttl:
                         self.query_cache[key] = (time.monotonic() + ttl, value)
@@ -143,9 +171,10 @@ class OperationsMixin:
 
             task = asyncio.create_task(run(), name=f"mc-query-{sid}-{kind}")
             self.query_inflight[key] = task
-        return await asyncio.shield(task)
+        return list_result(await asyncio.shield(task), kind)
 
     def invalidate_queries(self, sid: str):
+        self.tps_capabilities.pop(sid, None)
         for key in list(self.query_cache):
             if key[0] == sid:
                 self.query_cache.pop(key, None)
@@ -160,7 +189,7 @@ class OperationsMixin:
         ):
             previous = table.get(key)
             if interval and previous is not None and now - previous < interval:
-                raise MCError(f"查询过于频繁，请等待 {math.ceil(interval - (now - previous))} 秒。")
+                raise MCError(message_text("error_operations_011", value1=math.ceil(interval - (now - previous))))
         self.user_queries[identity] = now
         self.group_queries[chat_identity] = now
         if len(self.user_queries) > 10000:
@@ -184,15 +213,17 @@ class OperationsMixin:
                 details["whitelist"] = {"readable": True, "entries": len(rows)}
             except MCError as exc:
                 details["whitelist"] = {"readable": False, "error": str(exc)}
-            if server.tps_mode == "spark":
-                try:
-                    report = await asyncio.to_thread(read_spark_report, server, self.settings.spark_file_max_age)
-                    details["spark"] = {
-                        "status": parse_spark_tps(report).status,
-                        "path": str(server.directory / server.spark_file),
-                    }
-                except MCError as exc:
-                    details["spark"] = {"status": "不可用", "error": str(exc), "source": server.tps_source}
+            report = await self.cached_query(sid, "tps")
+            parsed = parse_performance(
+                report, report.info.command if isinstance(report, QueryResult) else server.tps_command
+            )
+            details["performance"] = {
+                "status": ("部分" if parsed.partial else "已解析") if parsed.recognized else "未解析",
+                "format": parsed.format,
+                "source": report.info.source if isinstance(report, QueryResult) else "RCON",
+                "command": report.info.command if isinstance(report, QueryResult) else server.tps_command,
+                "error": report.info.error if isinstance(report, QueryResult) else "",
+            }
             return details
 
         paths = {"plugin_data": self.data_dir, "temporary": Path(tempfile.gettempdir())}
@@ -204,6 +235,7 @@ class OperationsMixin:
         return {
             "checked": utc_now(),
             "workers": self.worker_health,
+            "bridge": self.bridge_snapshot(),
             "storage": storage,
             "database_bytes": sizes,
             "servers": await asyncio.gather(*(server_check(sid) for sid in group.servers)),
@@ -243,7 +275,18 @@ class OperationsMixin:
             if send and recipients:
                 key = "alert" if bad else "alert_recovery"
                 text = self.settings.render(
-                    key, server=self.settings.servers[sid].name, alert_type=kind, alert_detail=detail
+                    key,
+                    server=self.settings.servers[sid].name,
+                    server_id=sid,
+                    alert_type=message_text(
+                        {
+                            "RCON 不可用": "alert_type_rcon",
+                            "磁盘空间不足": "alert_type_disk",
+                            "TPS 过低": "alert_type_tps",
+                        }.get(kind, "alert_type_other"),
+                        alert_type=kind,
+                    ),
+                    alert_detail=detail,
                 )
                 self.store.enqueue(recipients, text)
                 self.notification_wake.set()
@@ -261,7 +304,12 @@ class OperationsMixin:
                 continue
             status = self.last_status.get(sid, "探测中")
             if "离线" in status or status == "在线":
-                self.evaluate_alert(sid, "RCON 不可用", "离线" in status, status)
+                self.evaluate_alert(
+                    sid,
+                    "RCON 不可用",
+                    "离线" in status,
+                    message_text("alert_status_offline") if "离线" in status else message_text("alert_status_online"),
+                )
             storage = await asyncio.to_thread(path_health, server.directory)
             free = [
                 item["free_bytes"]
@@ -274,24 +322,33 @@ class OperationsMixin:
                     sid,
                     "磁盘空间不足",
                     free_mb < self.settings.disk_warning_mb,
-                    f"插件数据、临时目录或服务端所在盘剩余 {free_mb} MB",
+                    message_text("alert_disk_detail", free_mb=free_mb),
                 )
-            if server.tps_mode != "spark":
+            result = await self.cached_query(sid, "tps")
+            if isinstance(result, QueryResult) and result.info.error:
                 continue
-            report_path = server.directory / server.spark_file
-            if server.tps_source == "file" or (server.tps_source == "auto" and report_path.exists()):
-                try:
-                    await asyncio.to_thread(read_spark_report, server, self.settings.spark_file_max_age)
-                    stale, detail = False, "采集文件已恢复更新"
-                except MCError as exc:
-                    stale, detail = True, str(exc)
-                self.evaluate_alert(sid, "spark 采集异常", stale, detail)
-            metrics = parse_spark_tps(await self.cached_query(sid, "tps"))
-            if "tps_1m" not in metrics.missing:
-                value = float(metrics.values["tps_1m"])
-                self.evaluate_alert(
-                    sid, "TPS 过低", value < self.settings.alert_tps_threshold, f"最近 1 分钟 TPS={value}"
-                )
+            parsed = parse_performance(result, server.tps_command, self.settings.tps_missing_value)
+            values = performance_values(parsed, result, self.settings.tps_missing_value)
+            if "1m" in parsed.valid_windows:
+                raw_value = next(rate for window, rate in parsed.rates if window == "1m")
+                detail_key = "alert_tps_detail"
+            elif "perf_tps" in parsed.values or parsed.valid_windows:
+                raw_value = values["perf_tps"]
+                detail_key = "alert_tps_current_detail"
+            else:
+                # A numeric missing-value label must never become a sample.
+                # Target tick rates are configuration, not measured TPS.
+                continue
+            try:
+                value = float(raw_value.replace("*", "").replace(",", "."))
+            except (TypeError, ValueError, KeyError):
+                continue
+            self.evaluate_alert(
+                sid,
+                "TPS 过低",
+                value < self.settings.alert_tps_threshold,
+                message_text(detail_key, perf_tps=value),
+            )
 
     def cleanup_preview(self) -> dict:
         identifiers = self.store.retention_ids(self.settings.logs_retention_days, self.settings.logs_max_entries)
@@ -307,15 +364,15 @@ class OperationsMixin:
     def cleanup_apply(self, token: str) -> int:
         item = self.cleanup_previews.pop(token, None)
         if not item or item[0] < time.time():
-            raise MCError("清理预览已失效，请重新预览。")
+            raise MCError(message_text("error_operations_001"))
         return self.store.prune_logs(item[1])
 
     async def execute(self, actor: Actor, action: str, args: list[str]) -> str:
         if self.closed:
-            raise MCError("插件正在卸载。")
+            raise MCError(message_text("error_unloading"))
         group = self.settings.group_for(actor)
         if not isinstance(actor.user, str) or not actor.user.strip():
-            raise MCError("无法确认发送者身份。")
+            raise MCError(message_text("error_operations_002"))
         special = {
             "diagnose": (0, 1),
             "backup": (0, 0),
@@ -331,7 +388,7 @@ class OperationsMixin:
             return await self._execute_core(actor, action, args)
         low, high = special[action]
         if not low <= len(args) <= high:
-            raise MCError("指令参数数量不正确，请查看帮助。")
+            raise MCError(message_text("error_operations_003"))
         self.store.remember(group.id, actor.origin, actor.group)
         if action == "diagnose":
             self.require_admin(actor, group)
@@ -341,17 +398,37 @@ class OperationsMixin:
                 allowed = self.targets(group, args[0])
                 servers = [row for row in servers if row["id"] in allowed]
             lines = [
-                f"{row['name']}（{row['id']}）：{row['rcon']}；目录可写={row['directory']['writable']}；白名单可读={row['whitelist']['readable']}"
+                self.settings.render(
+                    "diagnostic_server",
+                    server=row["name"],
+                    server_id=row["id"],
+                    status=row["rcon"],
+                    writable=message_text("boolean_unknown")
+                    if row["directory"]["writable"] is None
+                    else message_text("boolean_true")
+                    if row["directory"]["writable"]
+                    else message_text("boolean_false"),
+                    readable=message_text("boolean_true")
+                    if row["whitelist"]["readable"]
+                    else message_text("boolean_false"),
+                )
                 for row in servers
             ]
             lines.extend(
-                f"后台 {name}：{value['state']}；最近错误={value['last_error'] or '无'}"
+                self.settings.render(
+                    "diagnostic_worker",
+                    worker=name,
+                    worker_state=message_text("worker_state_" + value["state"])
+                    if "worker_state_" + value["state"] in self.settings.messages
+                    else value["state"],
+                    error=value["last_error"] or message_text("no_error"),
+                )
                 for name, value in report["workers"].items()
             )
             return self.settings.render("diagnostics", result="\n".join(lines))
         if action == "backup":
             if actor.admin is not True:
-                raise MCError("插件完整备份仅允许已核实的 AstrBot 全局管理员或后台管理员创建。")
+                raise MCError(message_text("error_operations_012"))
             result = await self.backups.create(self.settings.raw)
             with self.store.transaction():
                 self.store.audit(group, actor, "backup", "", result["name"])
@@ -360,10 +437,10 @@ class OperationsMixin:
             targets = self.targets(group, args[0])
             for sid in targets:
                 if not self.settings.can_restart(actor, group, sid):
-                    raise MCError("没有此服务器的重启管理权限。")
+                    raise MCError(message_text("error_operations_016"))
                 job = next((row for row in self.store.jobs() if row["server"] == sid), None)
                 if sid not in self.restart_tasks or not job or job["phase"] not in {"queued", "countdown"}:
-                    raise MCError("只能取消尚未发送 stop 的重启倒计时。")
+                    raise MCError(message_text("error_operations_017"))
             for sid in targets:
                 self.cancel_requested.add(sid)
                 task = self.restart_tasks[sid]
@@ -374,7 +451,7 @@ class OperationsMixin:
                     self.store.finish_job(
                         sid,
                         "cancelled",
-                        "管理员取消倒计时",
+                        self.settings.render("restart_cancelled_detail"),
                         "",
                         self.settings.render("restart_cancelled", server=self.settings.servers[sid].name),
                         recipients=self.server_recipients(sid),
@@ -382,23 +459,33 @@ class OperationsMixin:
                     self.notification_wake.set()
                 self.cancel_requested.discard(sid)
                 with self.store.transaction():
-                    self.store.audit(group, actor, "restart_cancelled", sid, "发送 stop 前取消")
+                    self.store.audit(
+                        group, actor, "restart_cancelled", sid, self.settings.render("audit_restart_cancelled_1")
+                    )
             return "\n".join(
                 self.settings.render("restart_cancelled", server=self.settings.servers[sid].name) for sid in targets
             )
         if action == "requests":
             rows = self.store.pending_requests(group.id, "" if self.settings.can_manage(actor, group) else actor.user)
             lines = [
-                f"#{row['id']} · {row['kind']} · {row['player']} · {row['user']} · {row['created']}" for row in rows
+                self.settings.render(
+                    "request_entry",
+                    id=row["id"],
+                    request_kind=message_text("request_kind_" + row["kind"]),
+                    player=row["player"],
+                    user=row["user"],
+                    time=row["created"],
+                )
+                for row in rows
             ]
-            return self.settings.render("requests", entries="\n".join(lines) or "暂无待审核申请")
+            return self.settings.render("requests", entries="\n".join(lines) or self.settings.render("empty_requests"))
         if action in {"approve", "reject"}:
             return await self.review_request(
                 actor,
                 group,
                 positive(args[0], "申请编号", 1, 2**63 - 1),
                 action == "approve",
-                args[1] if len(args) > 1 else "管理员拒绝",
+                args[1] if len(args) > 1 else self.settings.render("default_rejection"),
             )
         async with self.locks[group.id]:
             await self.ensure_group(group)
@@ -415,14 +502,16 @@ class OperationsMixin:
                     self.settings.render("entry", id=row["id"], player=row["name"], owner=row["owner"])
                     for row in selected
                 )
-                or "暂无自己的条目",
+                or self.settings.render("empty_mine"),
             )
 
     async def submit_request(self, group, actor, kind, name, identifier, entry=None):
         with self.store.transaction():
             self.store.validate_player(group, name, identifier, exclude_id=entry["id"] if entry else None)
             request_id = self.store.create_request(group, actor, kind, name, identifier, entry)
-            self.store.audit(group, actor, "request_" + kind, name, f"申请 #{request_id}")
+            self.store.audit(
+                group, actor, "request_" + kind, name, self.settings.render("audit_event_1", id=request_id)
+            )
         return self.settings.render("request_created", id=request_id, player=name)
 
     async def review_request(self, actor, group, request_id: int, approve: bool, detail: str = "") -> str:
@@ -433,7 +522,7 @@ class OperationsMixin:
                 "SELECT * FROM requests WHERE id=? AND scope=? AND status='pending'", (request_id, group.id)
             ).fetchone()
             if not row:
-                raise MCError("未找到本配置组待审核的申请。")
+                raise MCError(message_text("error_operations_013"))
             row = dict(row)
             with self.store.transaction():
                 if approve:
@@ -442,11 +531,11 @@ class OperationsMixin:
                     if row["kind"] == "add":
                         owned = [entry for entry in self.store.entries(group.id) if entry["owner"] == row["user"]]
                         if len(owned) >= group.max_entries:
-                            raise MCError("申请人的白名单数量已达到上限。")
+                            raise MCError(message_text("error_operations_022"))
                         try:
                             self.store.insert(group.id, row["player"], row["uuid"], row["user"])
                         except sqlite3.IntegrityError:
-                            raise MCError("该玩家已存在，无法重复通过。") from None
+                            raise MCError(message_text("error_operations_025")) from None
                     else:
                         current = self.store.find(group.id, str(row["target"]))
                         if (
@@ -454,14 +543,14 @@ class OperationsMixin:
                             or any(current[key] != original[key] for key in ("name", "uuid", "owner"))
                             or current["owner"] != row["user"]
                         ):
-                            raise MCError("原条目或归属已变化，请拒绝旧申请并重新提交。")
+                            raise MCError(message_text("error_operations_023"))
                         try:
                             self.store.db.execute(
                                 "UPDATE entries SET name=?,uuid=? WHERE scope=? AND id=? AND owner=?",
                                 (row["player"], row["uuid"], group.id, row["target"], row["user"]),
                             )
                         except sqlite3.IntegrityError:
-                            raise MCError("新的玩家名或 UUID 已存在。") from None
+                            raise MCError(message_text("error_operations_026")) from None
                     self.store.mark_dirty(group.servers)
                 status = "approved" if approve else "rejected"
                 self.store.db.execute(
@@ -473,7 +562,7 @@ class OperationsMixin:
                     actor,
                     "request_" + status,
                     row["player"],
-                    f"申请 #{request_id}；申请人={row['user']}；{detail[:500]}",
+                    self.settings.render("audit_event_2", id=request_id, owner=row["user"], detail=detail[:500]),
                 )
             sync = await self.sync_group(group) if approve else ""
             return self.settings.render(
@@ -510,7 +599,7 @@ class OperationsMixin:
 
         self.require_admin(actor, group)
         if not isinstance(data, str) or len(data) > 1024 * 1024:
-            raise MCError("导入文本不能超过 1 MB。")
+            raise MCError(message_text("error_operations_004"))
         try:
             if format_name == "json":
                 rows = json.loads(data)
@@ -521,11 +610,11 @@ class OperationsMixin:
             elif format_name == "text":
                 rows = [{"name": line.strip()} for line in data.splitlines() if line.strip()]
             else:
-                raise MCError("导入格式应为 json、csv 或 text。")
+                raise MCError(message_text("error_operations_018"))
         except (ValueError, TypeError):
-            raise MCError("无法解析导入内容。") from None
+            raise MCError(message_text("error_operations_014")) from None
         if not isinstance(rows, list) or not 1 <= len(rows) <= 500 or any(not isinstance(row, dict) for row in rows):
-            raise MCError("每次导入应包含 1～500 条玩家记录。")
+            raise MCError(message_text("error_operations_005"))
         additions, skipped, errors = [], [], []
         async with self.locks[group.id]:
             await self.ensure_group(group)
@@ -536,17 +625,17 @@ class OperationsMixin:
                     name = player_name(str(row.get("name", "")))
                     owner = str(row.get("owner") or "")
                     if len(owner) > 128 or any(ord(char) < 32 for char in owner):
-                        raise MCError("归属用户 ID 无效。")
+                        raise MCError(message_text("error_operations_019"))
                     if name.casefold() in seen:
-                        raise MCError("导入内容存在重复玩家。")
+                        raise MCError(message_text("error_operations_020"))
                     seen.add(name.casefold())
                     canonical, identifier = await self.resolve_player(group, name)
                     if row.get("uuid") and str(row["uuid"]) != identifier:
-                        raise MCError("导入 UUID 与当前身份模式不一致。")
+                        raise MCError(message_text("error_operations_021"))
                     old = existing.get(canonical.casefold())
                     if old:
                         if old["uuid"] != identifier:
-                            raise MCError("已有同名条目使用不同 UUID。")
+                            raise MCError(message_text("error_operations_024"))
                         skipped.append(canonical)
                         continue
                     self.store.validate_player(group, canonical, identifier)
@@ -557,7 +646,7 @@ class OperationsMixin:
         now = time.time()
         self.bulk_previews = {key: value for key, value in self.bulk_previews.items() if value["expires"] > now}
         if len(self.bulk_previews) >= 10:
-            raise MCError("待确认导入过多，请稍后重试。")
+            raise MCError(message_text("error_operations_006"))
         token = secrets.token_urlsafe(24)
         self.bulk_previews[token] = {
             "scope": group.id,
@@ -578,24 +667,30 @@ class OperationsMixin:
             or preview["scope"] != group.id
             or preview["user"] != actor.user
         ):
-            raise MCError("导入预览已失效，请重新预览。")
+            raise MCError(message_text("error_operations_007"))
         if preview["errors"]:
-            raise MCError("请先修正预览中的错误。")
+            raise MCError(message_text("error_operations_008"))
         async with self.locks[group.id]:
             if self.entries_fingerprint(group) != preview["fingerprint"]:
-                raise MCError("白名单已变化，请重新预览后导入。")
+                raise MCError(message_text("error_operations_015"))
             with self.store.transaction():
                 for entry in preview["entries"]:
                     self.store.validate_player(group, entry["name"], entry["uuid"])
                     self.store.insert(group.id, entry["name"], entry["uuid"], entry["owner"])
-                    self.store.audit(group, actor, "bulk_add", entry["name"], "管理员批量导入；归属=" + entry["owner"])
+                    self.store.audit(
+                        group,
+                        actor,
+                        "bulk_add",
+                        entry["name"],
+                        self.settings.render("audit_bulk_add", owner=entry["owner"]),
+                    )
                 self.store.mark_dirty(group.servers)
             return {"count": len(preview["entries"]), "sync": await self.sync_group(group)}
 
     async def bulk_change(self, actor, group, identifiers: list[int], action: str, owner: str = "") -> dict:
         self.require_admin(actor, group)
         if not isinstance(identifiers, list) or not 1 <= len(identifiers) <= 500:
-            raise MCError("请选择 1～500 条记录。")
+            raise MCError(message_text("error_operations_009"))
         ids = list(dict.fromkeys(positive(value, "编号", 1, 2**63 - 1) for value in identifiers))
         if (
             action not in {"remove", "transfer"}
@@ -603,7 +698,7 @@ class OperationsMixin:
             or len(owner) > 128
             or any(ord(char) < 32 for char in owner)
         ):
-            raise MCError("批量操作或归属无效。")
+            raise MCError(message_text("error_operations_010"))
         async with self.locks[group.id]:
             entries = [self.store.find(group.id, str(identifier)) for identifier in ids]
             with self.store.transaction():
@@ -619,7 +714,12 @@ class OperationsMixin:
                         actor,
                         "bulk_" + action,
                         entry["name"],
-                        f"#{entry['id']}；原归属={entry['owner']}；新归属={owner if action == 'transfer' else '已移除'}",
+                        self.settings.render(
+                            "audit_event_3",
+                            id=entry["id"],
+                            old_owner=entry["owner"],
+                            new_owner=owner if action == "transfer" else message_text("owner_removed"),
+                        ),
                     )
                 if action == "remove":
                     self.store.mark_dirty(group.servers)

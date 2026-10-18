@@ -4,6 +4,7 @@ import asyncio
 import struct
 
 from .config import MCError, Server
+from .message_catalog import text as message_text
 
 
 class Rcon:
@@ -21,16 +22,16 @@ class Rcon:
         try:
             async with asyncio.timeout(self.timeout):
                 if not self.server.password:
-                    raise MCError("未配置 RCON 密码，或密码环境变量为空。")
+                    raise MCError(message_text("error_rcon_006"))
                 self.reader, self.writer = await asyncio.open_connection(self.server.host, self.server.port)
                 await self.send(1, 3, self.server.password)
                 for _ in range(4):
                     rid, kind, _ = await self.packet()
                     if rid == -1:
-                        raise MCError("RCON 认证失败，请检查密码。")
+                        raise MCError(message_text("error_rcon_009"))
                     if kind == 2 and rid == 1:
                         return self
-                raise MCError("RCON 认证响应无效。")
+                raise MCError(message_text("error_rcon_005"))
         except BaseException:
             await self.close()
             raise
@@ -49,20 +50,20 @@ class Rcon:
 
     async def send(self, identifier: int, kind: int, command: str):
         if any(c in command for c in "\n\r\x00"):
-            raise MCError("RCON 命令包含无效字符。")
+            raise MCError(message_text("error_rcon_001"))
         data = struct.pack("<ii", identifier, kind) + command.encode("utf-8") + b"\0\0"
         if len(data) > 4096:
-            raise MCError("RCON 命令过长。")
+            raise MCError(message_text("error_rcon_002"))
         self.writer.write(struct.pack("<i", len(data)) + data)
         await self.writer.drain()
 
     async def packet(self) -> tuple[int, int, bytes]:
         length = struct.unpack("<i", await self.reader.readexactly(4))[0]
         if not 10 <= length <= 4 * 1024 * 1024:
-            raise MCError("RCON 返回了无效包长度。")
+            raise MCError(message_text("error_rcon_003"))
         data = await self.reader.readexactly(length)
         if data[-2:] != b"\0\0":
-            raise MCError("RCON 返回包缺少结束符。")
+            raise MCError(message_text("error_rcon_004"))
         rid, kind = struct.unpack("<ii", data[:8])
         return rid, kind, data[8:-2]
 
@@ -82,11 +83,11 @@ class Rcon:
                 if rid == delimiter and kind == 0:
                     return b"".join(parts).decode("utf-8", errors="replace")
                 if rid != identifier or kind != 0:
-                    raise MCError("RCON 响应编号或类型不匹配。")
+                    raise MCError(message_text("error_rcon_007"))
                 parts.append(body)
                 length += len(body)
                 if length > 1024 * 1024:
-                    raise MCError("RCON 响应超过 1 MB。")
+                    raise MCError(message_text("error_rcon_008"))
 
     async def stop(self):
         async with asyncio.timeout(self.timeout):

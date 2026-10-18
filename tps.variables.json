@@ -7,7 +7,15 @@
       "description": "最近 5 秒的 TPS",
       "unit": "TPS",
       "example": "13.24",
-      "category": "指标"
+      "category": "指标",
+      "group": "TPS",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
     },
     {
       "name": "tps_10s",
@@ -15,7 +23,15 @@
       "description": "最近 10 秒的 TPS",
       "unit": "TPS",
       "example": "13.37",
-      "category": "指标"
+      "category": "指标",
+      "group": "TPS",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
     },
     {
       "name": "tps_1m",
@@ -23,7 +39,15 @@
       "description": "最近 1 分钟的 TPS",
       "unit": "TPS",
       "example": "15.95",
-      "category": "指标"
+      "category": "指标",
+      "group": "TPS",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
     },
     {
       "name": "tps_5m",
@@ -31,7 +55,15 @@
       "description": "最近 5 分钟的 TPS",
       "unit": "TPS",
       "example": "19.03",
-      "category": "指标"
+      "category": "指标",
+      "group": "TPS",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
     },
     {
       "name": "tps_15m",
@@ -39,7 +71,15 @@
       "description": "最近 15 分钟的 TPS",
       "unit": "TPS",
       "example": "19.67",
-      "category": "指标"
+      "category": "指标",
+      "group": "TPS",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
     },
     {
       "name": "mspt_10s_min",
@@ -47,7 +87,14 @@
       "description": "最近 10 秒的最小 Tick 耗时",
       "unit": "ms",
       "example": "69.1",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_10s_med",
@@ -55,7 +102,14 @@
       "description": "最近 10 秒的 Tick 耗时中位数",
       "unit": "ms",
       "example": "74.3",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_10s_p95",
@@ -63,7 +117,14 @@
       "description": "最近 10 秒的 Tick 耗时第 95 百分位",
       "unit": "ms",
       "example": "79.6",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_10s_max",
@@ -71,7 +132,14 @@
       "description": "最近 10 秒的最大 Tick 耗时",
       "unit": "ms",
       "example": "103.2",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_1m_min",
@@ -79,7 +147,14 @@
       "description": "最近 1 分钟的最小 Tick 耗时",
       "unit": "ms",
       "example": "31.1",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_1m_med",
@@ -87,7 +162,14 @@
       "description": "最近 1 分钟的 Tick 耗时中位数",
       "unit": "ms",
       "example": "64.6",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_1m_p95",
@@ -95,7 +177,14 @@
       "description": "最近 1 分钟的 Tick 耗时第 95 百分位",
       "unit": "ms",
       "example": "77.0",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "mspt_1m_max",
@@ -103,7 +192,14 @@
       "description": "最近 1 分钟的最大 Tick 耗时",
       "unit": "ms",
       "example": "103.5",
-      "category": "指标"
+      "category": "指标",
+      "group": "Tick 耗时",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_system_10s",
@@ -111,7 +207,14 @@
       "description": "最近 10 秒的系统整体 CPU 使用率",
       "unit": "%",
       "example": "33",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_system_1m",
@@ -119,7 +222,14 @@
       "description": "最近 1 分钟的系统整体 CPU 使用率",
       "unit": "%",
       "example": "35",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_system_15m",
@@ -127,7 +237,14 @@
       "description": "最近 15 分钟的系统整体 CPU 使用率",
       "unit": "%",
       "example": "35",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_process_10s",
@@ -135,7 +252,14 @@
       "description": "最近 10 秒的 MC Java 进程 CPU 使用率",
       "unit": "%",
       "example": "14",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_process_1m",
@@ -143,7 +267,14 @@
       "description": "最近 1 分钟的 MC Java 进程 CPU 使用率",
       "unit": "%",
       "example": "14",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "cpu_process_15m",
@@ -151,7 +282,14 @@
       "description": "最近 15 分钟的 MC Java 进程 CPU 使用率",
       "unit": "%",
       "example": "15",
-      "category": "指标"
+      "category": "指标",
+      "group": "CPU",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark"
+      ]
     },
     {
       "name": "server",
@@ -159,7 +297,21 @@
       "description": "服务器显示名称",
       "unit": "",
       "example": "服务器 1",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "server_id",
@@ -167,7 +319,21 @@
       "description": "服务器配置 ID",
       "unit": "",
       "example": "server1",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "tps_command",
@@ -175,15 +341,41 @@
       "description": "配置的控制台命令（RCON 查询时使用）",
       "unit": "",
       "example": "spark tps",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "result",
       "placeholder": "{result}",
-      "description": "去掉颜色代码后的原始响应（兼容旧模板）",
+      "description": "当前可读结果；spark/玩家为原始回复，状态为状态说明（兼容旧模板）",
       "unit": "",
       "example": "TPS from last ...",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "tps_raw",
@@ -191,15 +383,39 @@
       "description": "去掉颜色代码后的原始响应，与 result 相同",
       "unit": "",
       "example": "TPS from last ...",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "tps_parse_status",
       "placeholder": "{tps_parse_status}",
-      "description": "完整、部分或未解析",
+      "description": "spark：完整/部分/未解析；其他格式：已解析/部分/未解析",
       "unit": "",
       "example": "完整",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "tps_missing_fields",
@@ -207,7 +423,19 @@
       "description": "缺失或无效指标的变量名列表",
       "unit": "",
       "example": "mspt_10s_min, mspt_10s_med",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
     },
     {
       "name": "tps_warning",
@@ -215,7 +443,1619 @@
       "description": "根据 tps_warning 模板生成的缺失提示；完整时为空",
       "unit": "",
       "example": "部分 spark 数据不可用…",
-      "category": "辅助"
+      "category": "辅助",
+      "group": "辅助",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_source",
+      "placeholder": "{query_source}",
+      "description": "本次实际来源：RCON / 服务端新增日志；后者仍由本次 RCON 命令触发",
+      "unit": "",
+      "example": "RCON",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_command",
+      "placeholder": "{query_command}",
+      "description": "本次实际执行的命令",
+      "unit": "",
+      "example": "forge tps",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_latency_ms",
+      "placeholder": "{query_latency_ms}",
+      "description": "实际采集耗时，包含排队时间；缓存命中保留原耗时",
+      "unit": "ms",
+      "example": "12.4",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_checked_at",
+      "placeholder": "{query_checked_at}",
+      "description": "采集完成时间，ISO 8601 / UTC",
+      "unit": "",
+      "example": "2026-10-17T02:00:00+00:00",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_cached",
+      "placeholder": "{query_cached}",
+      "description": "是否使用短缓存：是 / 否",
+      "unit": "",
+      "example": "否",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_age_seconds",
+      "placeholder": "{query_age_seconds}",
+      "description": "距离本次结果采集完成的时间",
+      "unit": "s",
+      "example": "0.2",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_error",
+      "placeholder": "{query_error}",
+      "description": "失败原因；成功时为空",
+      "unit": "",
+      "example": "服务端返回空响应",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "query_warning",
+      "placeholder": "{query_warning}",
+      "description": "补充说明；正常时为空",
+      "unit": "",
+      "example": "在线人数未能解析",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "rcon_online",
+      "placeholder": "{rcon_online}",
+      "description": "本次是否验证 RCON：是 / 否 / 未验证",
+      "unit": "",
+      "example": "是",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark",
+        "status",
+        "players"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "tps_source",
+      "placeholder": "{tps_source}",
+      "description": "spark 查询来源：rcon / log / unavailable",
+      "unit": "",
+      "example": "log",
+      "category": "查询信息",
+      "group": "查询信息",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "status",
+      "placeholder": "{status}",
+      "description": "本次状态查询结果，不等同于游戏端口检测",
+      "unit": "",
+      "example": "在线（RCON 查询成功）",
+      "category": "服务器状态",
+      "group": "服务器状态",
+      "scopes": [
+        "status",
+        "players"
+      ],
+      "formats": [
+        "status"
+      ]
+    },
+    {
+      "name": "players_online",
+      "placeholder": "{players_online}",
+      "description": "list 回复中的在线人数；无法解析时不填 0",
+      "unit": "人",
+      "example": "2",
+      "category": "服务器状态",
+      "group": "服务器状态",
+      "scopes": [
+        "status",
+        "players"
+      ],
+      "formats": [
+        "status"
+      ]
+    },
+    {
+      "name": "players_max",
+      "placeholder": "{players_max}",
+      "description": "list 回复中的人数上限",
+      "unit": "人",
+      "example": "20",
+      "category": "服务器状态",
+      "group": "服务器状态",
+      "scopes": [
+        "status",
+        "players"
+      ],
+      "formats": [
+        "status"
+      ]
+    },
+    {
+      "name": "players_names",
+      "placeholder": "{players_names}",
+      "description": "list 回复中的玩家列表；明确 0 人时为 无",
+      "unit": "",
+      "example": "Steve, Alex",
+      "category": "服务器状态",
+      "group": "服务器状态",
+      "scopes": [
+        "status",
+        "players"
+      ],
+      "formats": [
+        "status"
+      ]
+    },
+    {
+      "name": "players_raw",
+      "placeholder": "{players_raw}",
+      "description": "去除颜色码后的原始玩家查询回复",
+      "unit": "",
+      "example": "There are 2 of a max of 20 players online: Steve, Alex",
+      "category": "服务器状态",
+      "group": "服务器状态",
+      "scopes": [
+        "status",
+        "players"
+      ],
+      "formats": [
+        "status"
+      ]
+    },
+    {
+      "name": "perf_format",
+      "placeholder": "{perf_format}",
+      "description": "识别的格式：spark / Paper/Spigot / Forge/NeoForge / tick query / 自定义 / 未识别",
+      "unit": "",
+      "example": "Forge/NeoForge",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_parse_status",
+      "placeholder": "{perf_parse_status}",
+      "description": "跨核心解析结果：已解析 / 部分 / 未解析",
+      "unit": "",
+      "example": "已解析",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_tps",
+      "placeholder": "{perf_tps}",
+      "description": "总体或最短可用窗口的 TPS；目标 Tick 速率不会填入",
+      "unit": "TPS",
+      "example": "19.98",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "custom"
+      ]
+    },
+    {
+      "name": "perf_tps_windows",
+      "placeholder": "{perf_tps_windows}",
+      "description": "本次回复实际提供的 TPS 窗口，保持标题顺序",
+      "unit": "",
+      "example": "1m / 5m / 15m",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_tps_values",
+      "placeholder": "{perf_tps_values}",
+      "description": "与窗口对应的 TPS，保留 * 标记和缺失位置",
+      "unit": "TPS",
+      "example": "20.0* / 19.9 / 19.8",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_mspt",
+      "placeholder": "{perf_mspt}",
+      "description": "核心明确标注的 Tick 耗时；只写 Tick time 时不推断统计类型，不以中位数充当平均值",
+      "unit": "ms",
+      "example": "12.3",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge",
+        "tick",
+        "custom"
+      ]
+    },
+    {
+      "name": "perf_target_rate",
+      "placeholder": "{perf_target_rate}",
+      "description": "原版目标/配置 Tick 速率，非实测 TPS",
+      "unit": "tick/s",
+      "example": "20",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "tick"
+      ]
+    },
+    {
+      "name": "perf_tick_state",
+      "placeholder": "{perf_tick_state}",
+      "description": "原版明确报告的运行状态，未知时显示缺失值",
+      "unit": "",
+      "example": "正常",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "tick"
+      ]
+    },
+    {
+      "name": "perf_dimensions",
+      "placeholder": "{perf_dimensions}",
+      "description": "Forge/NeoForge 所有维度与总体明细，不跨维度计算平均",
+      "unit": "",
+      "example": "minecraft:overworld：TPS 20 · Tick 12 ms",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "perf_memory",
+      "placeholder": "{perf_memory}",
+      "description": "回复中实际提供的内存信息；未自行探测 JVM/进程",
+      "unit": "",
+      "example": "1024 / 2048 MB",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_entities",
+      "placeholder": "{perf_entities}",
+      "description": "回复中实际提供的实体统计；保留 ticking/non-ticking 含义",
+      "unit": "",
+      "example": "1327 ticking / 12 non-ticking",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_tps_line",
+      "placeholder": "{perf_tps_line}",
+      "description": "带标签的 TPS 汇总行",
+      "unit": "",
+      "example": "⚡ TPS（1m / 5m / 15m）：20.0 / 19.9 / 19.8",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_tick_lines",
+      "placeholder": "{perf_tick_lines}",
+      "description": "带标签的 Tick 明细，可能多行",
+      "unit": "",
+      "example": "⏱ Tick 平均耗时：12.3 ms",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_cpu_lines",
+      "placeholder": "{perf_cpu_lines}",
+      "description": "带标签的 CPU 明细，缺失时明确说明",
+      "unit": "",
+      "example": "🖥 CPU（进程）：14%",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_memory_line",
+      "placeholder": "{perf_memory_line}",
+      "description": "带标签的内存行，缺失时明确说明",
+      "unit": "",
+      "example": "💾 内存：本次回复未提供",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_entities_line",
+      "placeholder": "{perf_entities_line}",
+      "description": "带标签的实体行，缺失时明确说明",
+      "unit": "",
+      "example": "🧍 实体：本次回复未提供",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "perf_notice",
+      "placeholder": "{perf_notice}",
+      "description": "解析说明，包含目标速率、星号或缺失提醒",
+      "unit": "",
+      "example": "\n说明：目标速率不等于实测 TPS",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "tps_1s",
+      "placeholder": "{tps_1s}",
+      "description": "回复明确标注的最近 1 秒 TPS",
+      "unit": "TPS",
+      "example": "19.99",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
+    },
+    {
+      "name": "tps_30s",
+      "placeholder": "{tps_30s}",
+      "description": "回复明确标注的最近 30 秒 TPS",
+      "unit": "TPS",
+      "example": "19.95",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper"
+      ]
+    },
+    {
+      "name": "tps_overall",
+      "placeholder": "{tps_overall}",
+      "description": "Forge/NeoForge 明确标注的 Overall TPS，非维度平均",
+      "unit": "TPS",
+      "example": "19.98",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "mspt_overall",
+      "placeholder": "{mspt_overall}",
+      "description": "Forge/NeoForge 明确标注的 Overall 平均 Tick 耗时",
+      "unit": "ms",
+      "example": "13.5",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "mspt_avg",
+      "placeholder": "{mspt_avg}",
+      "description": "回复明确报告的平均 Tick 耗时；spark 中位数不填此变量",
+      "unit": "ms",
+      "example": "12.3",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge",
+        "tick",
+        "custom"
+      ]
+    },
+    {
+      "name": "mspt_p50",
+      "placeholder": "{mspt_p50}",
+      "description": "tick query 明确标注的第 50 百分位 Tick 耗时",
+      "unit": "ms",
+      "example": "11.9",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "tick"
+      ]
+    },
+    {
+      "name": "mspt_p95",
+      "placeholder": "{mspt_p95}",
+      "description": "tick query 明确标注的第 95 百分位 Tick 耗时",
+      "unit": "ms",
+      "example": "22.4",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "tick"
+      ]
+    },
+    {
+      "name": "mspt_p99",
+      "placeholder": "{mspt_p99}",
+      "description": "tick query 明确标注的第 99 百分位 Tick 耗时",
+      "unit": "ms",
+      "example": "31.0",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "tick"
+      ]
+    },
+    {
+      "name": "cpu_usage",
+      "placeholder": "{cpu_usage}",
+      "description": "自定义回复中仅标注 CPU 的数值；不假定是进程或系统",
+      "unit": "%",
+      "example": "35",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "custom"
+      ]
+    },
+    {
+      "name": "memory_used",
+      "placeholder": "{memory_used}",
+      "description": "内存已用量原始数值，需配合 memory_used_unit",
+      "unit": "",
+      "example": "1024",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "memory_used_unit",
+      "placeholder": "{memory_used_unit}",
+      "description": "内存已用量单位，保留回复原始单位",
+      "unit": "",
+      "example": "MB",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "memory_total",
+      "placeholder": "{memory_total}",
+      "description": "内存总量原始数值，需配合 memory_total_unit",
+      "unit": "",
+      "example": "2048",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "memory_total_unit",
+      "placeholder": "{memory_total_unit}",
+      "description": "内存总量单位，保留回复原始单位",
+      "unit": "",
+      "example": "MB",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "memory_max",
+      "placeholder": "{memory_max}",
+      "description": "回复另行明确标注的内存最大值，不能从 total 推断",
+      "unit": "",
+      "example": "4096",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "memory_max_unit",
+      "placeholder": "{memory_max_unit}",
+      "description": "内存最大值的原始单位",
+      "unit": "",
+      "example": "MB",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "entities_ticking",
+      "placeholder": "{entities_ticking}",
+      "description": "实体统计明确标注的 ticking 数量",
+      "unit": "个",
+      "example": "1327",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "entities_non_ticking",
+      "placeholder": "{entities_non_ticking}",
+      "description": "实体统计明确标注的 non-ticking 数量",
+      "unit": "个",
+      "example": "12",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "entities_total",
+      "placeholder": "{entities_total}",
+      "description": "明确的实体总量，或上述两项的和，仅限回复覆盖范围",
+      "unit": "个",
+      "example": "1339",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "spark",
+        "paper",
+        "forge",
+        "tick",
+        "custom",
+        "status"
+      ]
+    },
+    {
+      "name": "forge_dimension_count",
+      "placeholder": "{forge_dimension_count}",
+      "description": "回复列出的维度条数，不包含 Overall 汇总行",
+      "unit": "个",
+      "example": "2",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_dimensions_json",
+      "placeholder": "{forge_dimensions_json}",
+      "description": "全部维度与 Overall 的 JSON 数组；不可解析项为 null",
+      "unit": "",
+      "example": "[{\"dimension\":\"minecraft:overworld\",\"tps\":\"20\",\"mspt\":\"12.3\"}]",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_overworld_tps",
+      "placeholder": "{forge_overworld_tps}",
+      "description": "主世界明确报告的 TPS；识别 minecraft:overworld 或旧 Dim 0",
+      "unit": "TPS",
+      "example": "20",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_overworld_mspt",
+      "placeholder": "{forge_overworld_mspt}",
+      "description": "主世界明确报告的平均 Tick 耗时",
+      "unit": "ms",
+      "example": "12.3",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_nether_tps",
+      "placeholder": "{forge_nether_tps}",
+      "description": "下界明确报告的 TPS；识别 minecraft:the_nether 或旧 Dim -1",
+      "unit": "TPS",
+      "example": "20",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_nether_mspt",
+      "placeholder": "{forge_nether_mspt}",
+      "description": "下界明确报告的平均 Tick 耗时",
+      "unit": "ms",
+      "example": "1.2",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_end_tps",
+      "placeholder": "{forge_end_tps}",
+      "description": "末地明确报告的 TPS；识别 minecraft:the_end 或旧 Dim 1",
+      "unit": "TPS",
+      "example": "19.8",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    },
+    {
+      "name": "forge_end_mspt",
+      "placeholder": "{forge_end_mspt}",
+      "description": "末地明确报告的平均 Tick 耗时",
+      "unit": "ms",
+      "example": "2.5",
+      "category": "跨核心变量",
+      "group": "跨核心变量",
+      "scopes": [
+        "spark"
+      ],
+      "formats": [
+        "forge"
+      ]
+    }
+  ],
+  "note": "各核心实际数据均以变量提供；默认通过可编辑机器人模板输出，可选原文。formats标明可能的数据来源，不代表每次都有值。未知格式保留原文。无需Java采集器。",
+  "examples": [
+    {
+      "id": "universal",
+      "label": "通用初始模板",
+      "format": "spark",
+      "command": "spark tps",
+      "template": "📈 服务器性能 [{server}]\n\n{perf_tps_line}\n{perf_tick_lines}\n{perf_cpu_lines}\n{perf_entities_line}\n{perf_memory_line}{perf_notice}\n\nℹ️ 来源：{query_source} | 格式：{perf_format} | 指令：{query_command}\n耗时：{query_latency_ms} ms | 缓存：{query_cached}",
+      "preview": {
+        "perf_mspt": "暂无数据",
+        "memory_used_unit": "暂无数据",
+        "perf_entities": "暂无数据",
+        "forge_nether_tps": "暂无数据",
+        "perf_memory": "暂无数据",
+        "perf_dimensions": "暂无数据",
+        "entities_non_ticking": "暂无数据",
+        "mspt_avg": "暂无数据",
+        "perf_memory_line": "💾 内存：本次回复未提供",
+        "perf_entities_line": "🧍 实体：本次回复未提供",
+        "memory_max": "暂无数据",
+        "perf_tps_windows": "5s / 10s / 1m / 5m / 15m",
+        "entities_ticking": "暂无数据",
+        "memory_total": "暂无数据",
+        "forge_dimensions_json": "暂无数据",
+        "forge_nether_mspt": "暂无数据",
+        "memory_max_unit": "暂无数据",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "暂无数据",
+        "perf_tick_state": "暂无数据",
+        "tps_overall": "暂无数据",
+        "perf_format": "spark",
+        "mspt_p99": "暂无数据",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "暂无数据",
+        "forge_overworld_mspt": "暂无数据",
+        "perf_target_rate": "暂无数据",
+        "perf_tps": "13.24",
+        "perf_cpu_lines": "🖥 CPU（系统，10秒 / 1分钟 / 15分钟）：33 / 35 / 35 %\n🖥 CPU（MC进程，10秒 / 1分钟 / 15分钟）：14 / 14 / 15 %",
+        "forge_dimension_count": "暂无数据",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "暂无数据",
+        "mspt_p95": "暂无数据",
+        "memory_used": "暂无数据",
+        "perf_notice": "",
+        "perf_tps_values": "13.24 / 13.37 / 15.95 / 19.03 / 19.67",
+        "mspt_overall": "暂无数据",
+        "forge_overworld_tps": "暂无数据",
+        "cpu_usage": "暂无数据",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "⏱ Tick 10秒（最小 / 中位 / P95 / 最大）：69.1 / 74.3 / 79.6 / 103.2 ms\n⏱ Tick 1分钟（最小 / 中位 / P95 / 最大）：31.1 / 64.6 / 77.0 / 103.5 ms",
+        "perf_tps_line": "⚡ TPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：13.24 / 13.37 / 15.95 / 19.03 / 19.67",
+        "tps_5s": "13.24",
+        "tps_10s": "13.37",
+        "tps_1m": "15.95",
+        "tps_5m": "19.03",
+        "tps_15m": "19.67",
+        "mspt_10s_min": "69.1",
+        "mspt_10s_med": "74.3",
+        "mspt_10s_p95": "79.6",
+        "mspt_10s_max": "103.2",
+        "mspt_1m_min": "31.1",
+        "mspt_1m_med": "64.6",
+        "mspt_1m_p95": "77.0",
+        "mspt_1m_max": "103.5",
+        "cpu_system_10s": "33",
+        "cpu_system_1m": "35",
+        "cpu_system_15m": "35",
+        "cpu_process_10s": "14",
+        "cpu_process_1m": "14",
+        "cpu_process_15m": "15",
+        "query_source": "RCON",
+        "query_command": "spark tps",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "TPS from last 5s, 10s, 1m, 5m, 15m:\n13.24, 13.37, 15.95, 19.03, 19.67\n\nTick durations (min/med/95%ile/max ms) from last 10s, 1m:\n69.1/74.3/79.6/103.2; 31.1/64.6/77.0/103.5\n\nCPU usage from last 10s, 1m, 15m:\n33%, 35%, 35% (system)\n14%, 14%, 15% (process)\n",
+        "tps_raw": "TPS from last 5s, 10s, 1m, 5m, 15m:\n13.24, 13.37, 15.95, 19.03, 19.67\n\nTick durations (min/med/95%ile/max ms) from last 10s, 1m:\n69.1/74.3/79.6/103.2; 31.1/64.6/77.0/103.5\n\nCPU usage from last 10s, 1m, 15m:\n33%, 35%, 35% (system)\n14%, 14%, 15% (process)\n",
+        "tps_command": "spark tps",
+        "tps_parse_status": "完整",
+        "tps_missing_fields": "",
+        "tps_warning": ""
+      }
+    },
+    {
+      "id": "spark",
+      "label": "spark 完整指标",
+      "format": "spark",
+      "command": "spark tps",
+      "template": "[{server}] spark 性能\nTPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：\n{tps_5s} / {tps_10s} / {tps_1m} / {tps_5m} / {tps_15m}\nTick 耗时（毫秒，最小 / 中位数 / P95 / 最大）：\n最近10秒：{mspt_10s_min} / {mspt_10s_med} / {mspt_10s_p95} / {mspt_10s_max}\n最近1分钟：{mspt_1m_min} / {mspt_1m_med} / {mspt_1m_p95} / {mspt_1m_max}\nCPU（单位%，10秒 / 1分钟 / 15分钟）：\n系统：{cpu_system_10s} / {cpu_system_1m} / {cpu_system_15m}\nMC进程：{cpu_process_10s} / {cpu_process_1m} / {cpu_process_15m}{tps_warning}",
+      "preview": {
+        "perf_mspt": "暂无数据",
+        "memory_used_unit": "暂无数据",
+        "perf_entities": "暂无数据",
+        "forge_nether_tps": "暂无数据",
+        "perf_memory": "暂无数据",
+        "perf_dimensions": "暂无数据",
+        "entities_non_ticking": "暂无数据",
+        "mspt_avg": "暂无数据",
+        "perf_memory_line": "💾 内存：本次回复未提供",
+        "perf_entities_line": "🧍 实体：本次回复未提供",
+        "memory_max": "暂无数据",
+        "perf_tps_windows": "5s / 10s / 1m / 5m / 15m",
+        "entities_ticking": "暂无数据",
+        "memory_total": "暂无数据",
+        "forge_dimensions_json": "暂无数据",
+        "forge_nether_mspt": "暂无数据",
+        "memory_max_unit": "暂无数据",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "暂无数据",
+        "perf_tick_state": "暂无数据",
+        "tps_overall": "暂无数据",
+        "perf_format": "spark",
+        "mspt_p99": "暂无数据",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "暂无数据",
+        "forge_overworld_mspt": "暂无数据",
+        "perf_target_rate": "暂无数据",
+        "perf_tps": "13.24",
+        "perf_cpu_lines": "🖥 CPU（系统，10秒 / 1分钟 / 15分钟）：33 / 35 / 35 %\n🖥 CPU（MC进程，10秒 / 1分钟 / 15分钟）：14 / 14 / 15 %",
+        "forge_dimension_count": "暂无数据",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "暂无数据",
+        "mspt_p95": "暂无数据",
+        "memory_used": "暂无数据",
+        "perf_notice": "",
+        "perf_tps_values": "13.24 / 13.37 / 15.95 / 19.03 / 19.67",
+        "mspt_overall": "暂无数据",
+        "forge_overworld_tps": "暂无数据",
+        "cpu_usage": "暂无数据",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "⏱ Tick 10秒（最小 / 中位 / P95 / 最大）：69.1 / 74.3 / 79.6 / 103.2 ms\n⏱ Tick 1分钟（最小 / 中位 / P95 / 最大）：31.1 / 64.6 / 77.0 / 103.5 ms",
+        "perf_tps_line": "⚡ TPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：13.24 / 13.37 / 15.95 / 19.03 / 19.67",
+        "tps_5s": "13.24",
+        "tps_10s": "13.37",
+        "tps_1m": "15.95",
+        "tps_5m": "19.03",
+        "tps_15m": "19.67",
+        "mspt_10s_min": "69.1",
+        "mspt_10s_med": "74.3",
+        "mspt_10s_p95": "79.6",
+        "mspt_10s_max": "103.2",
+        "mspt_1m_min": "31.1",
+        "mspt_1m_med": "64.6",
+        "mspt_1m_p95": "77.0",
+        "mspt_1m_max": "103.5",
+        "cpu_system_10s": "33",
+        "cpu_system_1m": "35",
+        "cpu_system_15m": "35",
+        "cpu_process_10s": "14",
+        "cpu_process_1m": "14",
+        "cpu_process_15m": "15",
+        "query_source": "RCON",
+        "query_command": "spark tps",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "TPS from last 5s, 10s, 1m, 5m, 15m:\n13.24, 13.37, 15.95, 19.03, 19.67\n\nTick durations (min/med/95%ile/max ms) from last 10s, 1m:\n69.1/74.3/79.6/103.2; 31.1/64.6/77.0/103.5\n\nCPU usage from last 10s, 1m, 15m:\n33%, 35%, 35% (system)\n14%, 14%, 15% (process)\n",
+        "tps_raw": "TPS from last 5s, 10s, 1m, 5m, 15m:\n13.24, 13.37, 15.95, 19.03, 19.67\n\nTick durations (min/med/95%ile/max ms) from last 10s, 1m:\n69.1/74.3/79.6/103.2; 31.1/64.6/77.0/103.5\n\nCPU usage from last 10s, 1m, 15m:\n33%, 35%, 35% (system)\n14%, 14%, 15% (process)\n",
+        "tps_command": "spark tps",
+        "tps_parse_status": "完整",
+        "tps_missing_fields": "",
+        "tps_warning": ""
+      }
+    },
+    {
+      "id": "paper",
+      "label": "Paper / Spigot TPS",
+      "format": "paper",
+      "command": "tps",
+      "template": "[{server}] TPS\n1分钟：{tps_1m}\n5分钟：{tps_5m}\n15分钟：{tps_15m}\n来源：{query_source} · {query_latency_ms} ms",
+      "preview": {
+        "perf_mspt": "暂无数据",
+        "memory_used_unit": "暂无数据",
+        "perf_entities": "暂无数据",
+        "forge_nether_tps": "暂无数据",
+        "perf_memory": "暂无数据",
+        "perf_dimensions": "暂无数据",
+        "entities_non_ticking": "暂无数据",
+        "mspt_avg": "暂无数据",
+        "perf_memory_line": "💾 内存：本次回复未提供",
+        "perf_entities_line": "🧍 实体：本次回复未提供",
+        "memory_max": "暂无数据",
+        "perf_tps_windows": "1m / 5m / 15m",
+        "entities_ticking": "暂无数据",
+        "memory_total": "暂无数据",
+        "forge_dimensions_json": "暂无数据",
+        "forge_nether_mspt": "暂无数据",
+        "memory_max_unit": "暂无数据",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "暂无数据",
+        "perf_tick_state": "暂无数据",
+        "tps_overall": "暂无数据",
+        "perf_format": "Paper/Spigot",
+        "mspt_p99": "暂无数据",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "暂无数据",
+        "forge_overworld_mspt": "暂无数据",
+        "perf_target_rate": "暂无数据",
+        "perf_tps": "20.0",
+        "perf_cpu_lines": "🖥 CPU：本次回复未提供",
+        "forge_dimension_count": "暂无数据",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "暂无数据",
+        "mspt_p95": "暂无数据",
+        "memory_used": "暂无数据",
+        "perf_notice": "\n说明：已保留服务端的 * 标记；不将其解释为零值或缺失。",
+        "perf_tps_values": "20.0* / 19.9 / 19.8",
+        "mspt_overall": "暂无数据",
+        "forge_overworld_tps": "暂无数据",
+        "cpu_usage": "暂无数据",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "⏱ Tick：本次回复未提供",
+        "perf_tps_line": "⚡ TPS（1分钟 / 5分钟 / 15分钟）：20.0* / 19.9 / 19.8",
+        "tps_5s": "暂无数据",
+        "tps_10s": "暂无数据",
+        "tps_1m": "20.0",
+        "tps_5m": "19.9",
+        "tps_15m": "19.8",
+        "mspt_10s_min": "暂无数据",
+        "mspt_10s_med": "暂无数据",
+        "mspt_10s_p95": "暂无数据",
+        "mspt_10s_max": "暂无数据",
+        "mspt_1m_min": "暂无数据",
+        "mspt_1m_med": "暂无数据",
+        "mspt_1m_p95": "暂无数据",
+        "mspt_1m_max": "暂无数据",
+        "cpu_system_10s": "暂无数据",
+        "cpu_system_1m": "暂无数据",
+        "cpu_system_15m": "暂无数据",
+        "cpu_process_10s": "暂无数据",
+        "cpu_process_1m": "暂无数据",
+        "cpu_process_15m": "暂无数据",
+        "query_source": "RCON",
+        "query_command": "tps",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "TPS from last 1m, 5m, 15m: *20.0, 19.9, 19.8",
+        "tps_raw": "TPS from last 1m, 5m, 15m: *20.0, 19.9, 19.8",
+        "tps_command": "tps",
+        "tps_parse_status": "已解析",
+        "tps_missing_fields": "tps_5s, tps_10s, mspt_10s_min, mspt_10s_med, mspt_10s_p95, mspt_10s_max, mspt_1m_min, mspt_1m_med, mspt_1m_p95, mspt_1m_max, cpu_system_10s, cpu_system_1m, cpu_system_15m, cpu_process_10s, cpu_process_1m, cpu_process_15m",
+        "tps_warning": ""
+      }
+    },
+    {
+      "id": "forge",
+      "label": "Forge / NeoForge 维度指标",
+      "format": "forge",
+      "command": "forge tps",
+      "template": "[{server}] Forge 性能\n总体 TPS：{tps_overall}\n总体平均 Tick：{mspt_overall} ms\n主世界：{forge_overworld_tps} TPS / {forge_overworld_mspt} ms\n下界：{forge_nether_tps} TPS / {forge_nether_mspt} ms\n维度数：{forge_dimension_count}\n{perf_dimensions}\n来源：{query_source} · {query_latency_ms} ms",
+      "preview": {
+        "perf_mspt": "13.5",
+        "memory_used_unit": "暂无数据",
+        "perf_entities": "暂无数据",
+        "forge_nether_tps": "20.0",
+        "perf_memory": "暂无数据",
+        "perf_dimensions": "minecraft:overworld：TPS 20.0 · Tick 12.3 ms\nminecraft:the_nether：TPS 20.0 · Tick 1.2 ms\nOverall：TPS 19.98 · Tick 13.5 ms",
+        "entities_non_ticking": "暂无数据",
+        "mspt_avg": "13.5",
+        "perf_memory_line": "💾 内存：本次回复未提供",
+        "perf_entities_line": "🧍 实体：本次回复未提供",
+        "memory_max": "暂无数据",
+        "perf_tps_windows": "暂无数据",
+        "entities_ticking": "暂无数据",
+        "memory_total": "暂无数据",
+        "forge_dimensions_json": "[{\"dimension\": \"minecraft:overworld\", \"tps\": \"20.0\", \"mspt\": \"12.3\"}, {\"dimension\": \"minecraft:the_nether\", \"tps\": \"20.0\", \"mspt\": \"1.2\"}, {\"dimension\": \"Overall\", \"tps\": \"19.98\", \"mspt\": \"13.5\"}]",
+        "forge_nether_mspt": "1.2",
+        "memory_max_unit": "暂无数据",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "暂无数据",
+        "perf_tick_state": "暂无数据",
+        "tps_overall": "19.98",
+        "perf_format": "Forge/NeoForge",
+        "mspt_p99": "暂无数据",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "暂无数据",
+        "forge_overworld_mspt": "12.3",
+        "perf_target_rate": "暂无数据",
+        "perf_tps": "19.98",
+        "perf_cpu_lines": "🖥 CPU：本次回复未提供",
+        "forge_dimension_count": "2",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "暂无数据",
+        "mspt_p95": "暂无数据",
+        "memory_used": "暂无数据",
+        "perf_notice": "",
+        "perf_tps_values": "暂无数据",
+        "mspt_overall": "13.5",
+        "forge_overworld_tps": "20.0",
+        "cpu_usage": "暂无数据",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "🌍 维度与总体：\nminecraft:overworld：TPS 20.0 · Tick 12.3 ms\nminecraft:the_nether：TPS 20.0 · Tick 1.2 ms\nOverall：TPS 19.98 · Tick 13.5 ms",
+        "perf_tps_line": "⚡ TPS（总体/实测）：19.98",
+        "tps_5s": "暂无数据",
+        "tps_10s": "暂无数据",
+        "tps_1m": "暂无数据",
+        "tps_5m": "暂无数据",
+        "tps_15m": "暂无数据",
+        "mspt_10s_min": "暂无数据",
+        "mspt_10s_med": "暂无数据",
+        "mspt_10s_p95": "暂无数据",
+        "mspt_10s_max": "暂无数据",
+        "mspt_1m_min": "暂无数据",
+        "mspt_1m_med": "暂无数据",
+        "mspt_1m_p95": "暂无数据",
+        "mspt_1m_max": "暂无数据",
+        "cpu_system_10s": "暂无数据",
+        "cpu_system_1m": "暂无数据",
+        "cpu_system_15m": "暂无数据",
+        "cpu_process_10s": "暂无数据",
+        "cpu_process_1m": "暂无数据",
+        "cpu_process_15m": "暂无数据",
+        "query_source": "RCON",
+        "query_command": "forge tps",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "Dim minecraft:overworld: Mean tick time: 12.3 ms. Mean TPS: 20.0\nDim minecraft:the_nether: Mean tick time: 1.2 ms. Mean TPS: 20.0\nOverall: Mean tick time: 13.5 ms. Mean TPS: 19.98",
+        "tps_raw": "Dim minecraft:overworld: Mean tick time: 12.3 ms. Mean TPS: 20.0\nDim minecraft:the_nether: Mean tick time: 1.2 ms. Mean TPS: 20.0\nOverall: Mean tick time: 13.5 ms. Mean TPS: 19.98",
+        "tps_command": "forge tps",
+        "tps_parse_status": "已解析",
+        "tps_missing_fields": "tps_5s, tps_10s, tps_1m, tps_5m, tps_15m, mspt_10s_min, mspt_10s_med, mspt_10s_p95, mspt_10s_max, mspt_1m_min, mspt_1m_med, mspt_1m_p95, mspt_1m_max, cpu_system_10s, cpu_system_1m, cpu_system_15m, cpu_process_10s, cpu_process_1m, cpu_process_15m",
+        "tps_warning": ""
+      }
+    },
+    {
+      "id": "tick",
+      "label": "原版 tick query 指标",
+      "format": "tick",
+      "command": "tick query",
+      "template": "[{server}] Tick 状态\n目标速率：{perf_target_rate} tick/s（非实测 TPS）\n状态：{perf_tick_state}\n平均耗时：{mspt_avg} ms\nP50 / P95 / P99：{mspt_p50} / {mspt_p95} / {mspt_p99} ms\n来源：{query_source} · {query_latency_ms} ms",
+      "preview": {
+        "perf_mspt": "12.3",
+        "memory_used_unit": "暂无数据",
+        "perf_entities": "暂无数据",
+        "forge_nether_tps": "暂无数据",
+        "perf_memory": "暂无数据",
+        "perf_dimensions": "暂无数据",
+        "entities_non_ticking": "暂无数据",
+        "mspt_avg": "12.3",
+        "perf_memory_line": "💾 内存：本次回复未提供",
+        "perf_entities_line": "🧍 实体：本次回复未提供",
+        "memory_max": "暂无数据",
+        "perf_tps_windows": "暂无数据",
+        "entities_ticking": "暂无数据",
+        "memory_total": "暂无数据",
+        "forge_dimensions_json": "暂无数据",
+        "forge_nether_mspt": "暂无数据",
+        "memory_max_unit": "暂无数据",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "暂无数据",
+        "perf_tick_state": "正常",
+        "tps_overall": "暂无数据",
+        "perf_format": "tick query",
+        "mspt_p99": "31.0",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "暂无数据",
+        "forge_overworld_mspt": "暂无数据",
+        "perf_target_rate": "20",
+        "perf_tps": "暂无数据",
+        "perf_cpu_lines": "🖥 CPU：本次回复未提供",
+        "forge_dimension_count": "暂无数据",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "11.9",
+        "mspt_p95": "22.4",
+        "memory_used": "暂无数据",
+        "perf_notice": "\n说明：目标/配置 Tick 速率不等于实测 TPS，未将其填入 TPS 变量。",
+        "perf_tps_values": "暂无数据",
+        "mspt_overall": "暂无数据",
+        "forge_overworld_tps": "暂无数据",
+        "cpu_usage": "暂无数据",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "⏱ Tick 平均耗时：12.3 ms\n⏱ Tick 百分位：50th 11.9 ms / 95th 22.4 ms / 99th 31.0 ms",
+        "perf_tps_line": "⚡ 实测 TPS：未提供；目标/配置速率：20 tick/s；状态：正常",
+        "tps_5s": "暂无数据",
+        "tps_10s": "暂无数据",
+        "tps_1m": "暂无数据",
+        "tps_5m": "暂无数据",
+        "tps_15m": "暂无数据",
+        "mspt_10s_min": "暂无数据",
+        "mspt_10s_med": "暂无数据",
+        "mspt_10s_p95": "暂无数据",
+        "mspt_10s_max": "暂无数据",
+        "mspt_1m_min": "暂无数据",
+        "mspt_1m_med": "暂无数据",
+        "mspt_1m_p95": "暂无数据",
+        "mspt_1m_max": "暂无数据",
+        "cpu_system_10s": "暂无数据",
+        "cpu_system_1m": "暂无数据",
+        "cpu_system_15m": "暂无数据",
+        "cpu_process_10s": "暂无数据",
+        "cpu_process_1m": "暂无数据",
+        "cpu_process_15m": "暂无数据",
+        "query_source": "RCON",
+        "query_command": "tick query",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "The game is running normally. Target tick rate: 20 per second; Average time per tick: 12.3ms (50th: 11.9ms, 95th: 22.4ms, 99th: 31.0ms)",
+        "tps_raw": "The game is running normally. Target tick rate: 20 per second; Average time per tick: 12.3ms (50th: 11.9ms, 95th: 22.4ms, 99th: 31.0ms)",
+        "tps_command": "tick query",
+        "tps_parse_status": "已解析",
+        "tps_missing_fields": "tps_5s, tps_10s, tps_1m, tps_5m, tps_15m, mspt_10s_min, mspt_10s_med, mspt_10s_p95, mspt_10s_max, mspt_1m_min, mspt_1m_med, mspt_1m_p95, mspt_1m_max, cpu_system_10s, cpu_system_1m, cpu_system_15m, cpu_process_10s, cpu_process_1m, cpu_process_15m",
+        "tps_warning": ""
+      }
+    },
+    {
+      "id": "custom",
+      "label": "自定义性能回复",
+      "format": "custom",
+      "command": "custom:health",
+      "template": "[{server}] 性能\nTPS：{perf_tps}\n平均 Tick：{mspt_avg} ms\nCPU：{cpu_usage}%\n内存：{memory_used} {memory_used_unit} / {memory_total} {memory_total_unit}\n最大内存：{memory_max} {memory_max_unit}\n实体：{entities_total}（{entities_ticking} ticking / {entities_non_ticking} non-ticking）\n来源：{query_source} · {query_latency_ms} ms",
+      "preview": {
+        "perf_mspt": "12.4",
+        "memory_used_unit": "MB",
+        "perf_entities": "1327 ticking / 12 non-ticking",
+        "forge_nether_tps": "暂无数据",
+        "perf_memory": "1024 MB / 2048 MB (Max: 4096 MB)",
+        "perf_dimensions": "暂无数据",
+        "entities_non_ticking": "12",
+        "mspt_avg": "12.4",
+        "perf_memory_line": "💾 内存：1024 MB / 2048 MB (Max: 4096 MB)",
+        "perf_entities_line": "🧍 实体：1327 ticking / 12 non-ticking",
+        "memory_max": "4096",
+        "perf_tps_windows": "暂无数据",
+        "entities_ticking": "1327",
+        "memory_total": "2048",
+        "forge_dimensions_json": "暂无数据",
+        "forge_nether_mspt": "暂无数据",
+        "memory_max_unit": "MB",
+        "tps_30s": "暂无数据",
+        "forge_end_tps": "暂无数据",
+        "memory_total_unit": "MB",
+        "perf_tick_state": "暂无数据",
+        "tps_overall": "暂无数据",
+        "perf_format": "自定义",
+        "mspt_p99": "暂无数据",
+        "forge_end_mspt": "暂无数据",
+        "entities_total": "1339",
+        "forge_overworld_mspt": "暂无数据",
+        "perf_target_rate": "暂无数据",
+        "perf_tps": "19.97",
+        "perf_cpu_lines": "🖥 CPU（原始标注）：35 %",
+        "forge_dimension_count": "暂无数据",
+        "perf_parse_status": "已解析",
+        "mspt_p50": "暂无数据",
+        "mspt_p95": "暂无数据",
+        "memory_used": "1024",
+        "perf_notice": "",
+        "perf_tps_values": "暂无数据",
+        "mspt_overall": "暂无数据",
+        "forge_overworld_tps": "暂无数据",
+        "cpu_usage": "35",
+        "tps_1s": "暂无数据",
+        "perf_tick_lines": "⏱ Tick 耗时（原始标注）：12.4 ms",
+        "perf_tps_line": "⚡ TPS（总体/实测）：19.97",
+        "tps_5s": "暂无数据",
+        "tps_10s": "暂无数据",
+        "tps_1m": "暂无数据",
+        "tps_5m": "暂无数据",
+        "tps_15m": "暂无数据",
+        "mspt_10s_min": "暂无数据",
+        "mspt_10s_med": "暂无数据",
+        "mspt_10s_p95": "暂无数据",
+        "mspt_10s_max": "暂无数据",
+        "mspt_1m_min": "暂无数据",
+        "mspt_1m_med": "暂无数据",
+        "mspt_1m_p95": "暂无数据",
+        "mspt_1m_max": "暂无数据",
+        "cpu_system_10s": "暂无数据",
+        "cpu_system_1m": "暂无数据",
+        "cpu_system_15m": "暂无数据",
+        "cpu_process_10s": "暂无数据",
+        "cpu_process_1m": "暂无数据",
+        "cpu_process_15m": "暂无数据",
+        "query_source": "RCON",
+        "query_command": "custom:health",
+        "query_latency_ms": "12.4",
+        "query_checked_at": "2026-10-17T02:00:00+00:00",
+        "query_cached": "否",
+        "query_age_seconds": "0.0",
+        "query_error": "",
+        "query_warning": "",
+        "rcon_online": "是",
+        "tps_source": "rcon",
+        "tps_file_age_seconds": "暂无数据",
+        "server": "服务器 1",
+        "server_id": "server1",
+        "result": "TPS: 19.97\nAverage tick time: 12.4 ms\nCPU: 35%\nMemory: 1024/2048 MB (Max: 4096 MB)\nTotal Ticking: 1327, Total Non-Ticking: 12",
+        "tps_raw": "TPS: 19.97\nAverage tick time: 12.4 ms\nCPU: 35%\nMemory: 1024/2048 MB (Max: 4096 MB)\nTotal Ticking: 1327, Total Non-Ticking: 12",
+        "tps_command": "custom:health",
+        "tps_parse_status": "已解析",
+        "tps_missing_fields": "tps_5s, tps_10s, tps_1m, tps_5m, tps_15m, mspt_10s_min, mspt_10s_med, mspt_10s_p95, mspt_10s_max, mspt_1m_min, mspt_1m_med, mspt_1m_p95, mspt_1m_max, cpu_system_10s, cpu_system_1m, cpu_system_15m, cpu_process_10s, cpu_process_1m, cpu_process_15m",
+        "tps_warning": ""
+      }
     }
   ]
 }

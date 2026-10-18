@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from logger_stub import logger_stub
 from test_core import FakeRcon
 
 from mc_manager.backups import BackupManager
@@ -63,7 +64,9 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.offline = set()
         FakeRcon.disconnected = True
         FakeRcon.startup_fail = False
-        self.service = Service(Settings(copy.deepcopy(self.raw)), self.root / "data", send, FakeRcon)
+        self.service = Service(
+            Settings(copy.deepcopy(self.raw)), self.root / "data", send, FakeRcon, logger=logger_stub()
+        )
         self.service.settings.poll_interval = 0.001
         # Hosted Windows timers and file flushes can exceed a few milliseconds.
         self.service.settings.restart_timeout = 1
@@ -150,6 +153,7 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(0.01)
         self.assertFalse(self.service.delivery_task.done())
         self.assertIn("database or disk", self.service.worker_health["notifications"]["last_error"])
+        self.service.logger.exception.assert_any_call("MC %s 后台任务失败，%s 秒后重试", "notifications", 0.01)
 
     async def test_query_coalescing_cache_and_cancelled_waiter(self):
         started, release = asyncio.Event(), asyncio.Event()
@@ -406,11 +410,14 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
         await self.service.pause()
         self.assertIsNone(self.service.delivery_task)
 
-    async def test_native_mode_does_not_issue_low_tps_queries(self):
-        self.service.settings.servers["s1"] = replace(self.service.settings.servers["s1"], tps_mode="native")
-        with patch.object(self.service, "cached_query", return_value="no metrics") as query:
+    async def test_unknown_reply_does_not_produce_low_tps_alert(self):
+        with (
+            patch.object(self.service, "cached_query", return_value="no metrics") as query,
+            patch.object(self.service, "evaluate_alert") as alert,
+        ):
             await self.service.check_alerts()
-        self.assertNotIn("s1", [call.args[0] for call in query.await_args_list])
+        self.assertIn("s1", [call.args[0] for call in query.await_args_list])
+        self.assertNotIn("TPS 过低", [call.args[1] for call in alert.call_args_list])
 
     async def test_pending_requests_cancelled_when_platform_changes(self):
         self.service.settings.groups["g1"] = self.group = replace(self.group, approval_required=True)

@@ -74,7 +74,7 @@
         <nav class="settings-tabs" aria-label="运维分类">
           <button data-ops-tab="diagnostics" class="active">诊断</button><button data-ops-tab="backups">备份恢复</button><button data-ops-tab="notifications">通知队列</button><button data-ops-tab="requests">申请审核</button><button data-ops-tab="cleanup">日志清理</button>
         </nav>
-        <div id="ops-diagnostics" class="ops-section"><div class="section-head"><h3>环境与后台任务</h3><button id="ops-diagnose">重新诊断</button></div><p class="field-hint">检查当前组的 RCON、目录写入、磁盘空间与采集器状态。没有配置组时检查全部已配置服务器。</p><div id="ops-health" class="ops-stack" role="status"></div></div>
+        <div id="ops-diagnostics" class="ops-section"><div class="section-head"><h3>环境与后台任务</h3><button id="ops-diagnose">重新诊断</button></div><p class="field-hint">检查当前组的 RCON、目录写入、磁盘空间与查询状态。没有配置组时检查全部已配置服务器。</p><div id="ops-health" class="ops-stack" role="status"></div></div>
         <div id="ops-backups" class="ops-section" hidden><div class="section-head"><h3>插件数据备份</h3><div class="buttons"><button id="ops-backup-create">创建备份</button><button id="ops-backup-refresh" class="secondary">刷新列表</button></div></div><p class="field-hint">包含配置、凭据、白名单编号、归属和日志；请妥善保存。Minecraft 世界文件不在备份范围。定时备份与保留数量在常规设置中调整。</p><label class="ops-upload">上传已有备份以预览恢复<input id="ops-backup-upload" type="file" accept=".zip,application/zip"></label><div id="ops-backup-list" class="ops-stack"></div><div id="ops-restore-preview" class="ops-preview" hidden><h4>恢复预览</h4><pre id="ops-restore-summary"></pre><button id="ops-restore-apply" class="danger">确认恢复配置与数据库</button></div></div>
         <div id="ops-notifications" class="ops-section" hidden><div class="section-head"><h3>待发送与失败通知</h3><button id="ops-notification-refresh" class="secondary">刷新队列</button></div><p class="field-hint">失败通知按间隔重试，达到上限后进入失败列表。修复群会话或平台发送问题后可手动重试。</p><div id="ops-notification-list" class="ops-stack"></div></div>
         <div id="ops-requests" class="ops-section" hidden><div class="section-head"><h3>白名单申请</h3><button id="ops-request-refresh" class="secondary">刷新申请</button></div><label for="ops-reject-reason">拒绝原因（可选）</label><input id="ops-reject-reason" maxlength="500" placeholder="管理员拒绝"><div id="ops-request-list" class="ops-stack"></div></div>
@@ -82,37 +82,78 @@
       </section>
       <section id="settings" class="panel settings-panel" aria-labelledby="settings-title" hidden>
         <div class="settings-toolbar"><div class="settings-heading"><h2 id="settings-title" class="sr-only">配置与菜单</h2><span id="config-state" class="save-state" role="status">尚未加载</span></div><div class="buttons"><button id="reload-config" class="secondary">重新载入</button><button id="save-config">保存并生效</button></div></div>
-        <p class="settings-note">修改会保留在草稿中，保存后应用。</p>
+        <p id="settings-note" class="settings-note">修改后点击“保存并生效”。</p>
         <nav class="settings-tabs" aria-label="配置分类">
           <button data-settings-tab="connections" class="active" aria-pressed="true">服务器与群聊</button>
           <button data-settings-tab="general" aria-pressed="false">常规设置</button>
           <button data-settings-tab="commands" aria-pressed="false">指令与菜单</button>
+          <button data-settings-tab="bridge" class="settings-tab" type="button">消息互通</button>
           <button data-settings-tab="messages" aria-pressed="false">回复与广播</button>
           <button data-settings-tab="spark" aria-pressed="false">TPS 设置</button>
+          <button data-settings-tab="variables" aria-pressed="false">变量文档</button>
           <button data-settings-tab="advanced" aria-pressed="false">高级 JSON</button>
         </nav>
         <div id="settings-connections" class="settings-section">
+          <div id="quick-setup-card" class="config-block quick-setup">
+            <h3>快速配置</h3><p class="subtle">填写目录和群号，自动读取服务器连接参数，一次完成添加和群绑定。</p>
+            <div class="field-grid">
+              <div class="config-field"><label for="quick-root">服务端目录</label><input id="quick-root" placeholder="例如 D:/Minecraft，也可填写单台服务端目录" autocomplete="off"><span class="field-hint">只读取所选目录及最多两级子目录中的 server.properties。</span></div>
+              <div class="config-field"><label for="quick-group">绑定群号 / 群 ID</label><input id="quick-group" list="quick-known-groups" placeholder="多个群用逗号分隔"><datalist id="quick-known-groups"></datalist><span class="field-hint">勾选的服务器将共用这组群聊白名单。</span></div>
+              <div id="quick-platform-field" class="config-field" hidden><label for="quick-platform">消息机器人</label><select id="quick-platform"></select></div>
+              <div id="quick-platform-manual-field" class="config-field" hidden><label for="quick-platform-manual">消息机器人 Bot ID</label><input id="quick-platform-manual" placeholder="填写群内 /sid 返回的 Bot ID"></div>
+            </div>
+            <p id="quick-platform-hint" class="field-hint"></p>
+            <details class="advanced-options"><summary>远程地址 / 容器设置</summary><label for="quick-host">新服务器的 RCON 地址</label><input id="quick-host" value="127.0.0.1"><p class="field-hint">同机可保持默认；容器需要填写可从 AstrBot 访问的地址。不同端口映射可使用下方手动配置。</p></details>
+            <div class="buttons"><button id="quick-scan" type="button">扫描并读取配置</button><button id="quick-manual" type="button" class="secondary">手动配置</button></div>
+            <p id="quick-status" class="connection-result" role="status">服务端需已开启 RCON 并设置密码。扫描不会修改服务端文件，密码不会显示在页面。</p>
+            <div id="quick-results" hidden><p id="quick-scan-root" class="field-hint"></p><div class="buttons"><button id="quick-all" type="button" class="secondary">全选可用服务器</button><button id="quick-none" type="button" class="secondary">清空选择</button></div><div id="quick-warnings"></div><div id="quick-server-list" class="quick-server-list"></div><p id="quick-selected" class="field-hint"></p><button id="quick-save" type="button">保存并完成配置</button><p class="field-hint">首次接入会按原有规则合并现有白名单；不会开启覆盖损坏文件，也不会改写 server.properties。未开启白名单的服务器请先核对游戏入服限制。</p></div>
+          </div>
+          <details id="manual-settings" class="manual-settings"><summary>手动配置 · 编辑服务器、群聊和特殊连接</summary>
+
+          <div id="setup-guide" class="setup-guide"><div><h3 id="setup-title">三步完成配置</h3><p id="setup-description" class="subtle"></p></div><ol id="setup-steps"></ol><button id="setup-next" type="button">开始配置</button></div>
           <div class="config-block"><div class="section-head"><div><h3>服务端目录</h3><p class="subtle">填写所有服务端文件夹的共同父目录。</p></div></div><div id="root-field"></div></div>
           <div class="connections-grid">
             <div class="config-block"><div class="section-head"><div><h3>服务器</h3><p class="subtle">连接信息与查询方式。</p></div><button id="add-server">添加服务器</button></div><div id="configured-servers" class="configured-list"></div></div>
             <div class="config-block"><div class="section-head"><div><h3>群聊绑定</h3><p class="subtle">多个群可共用服务器。</p></div><button id="add-group">添加群聊</button></div><div id="configured-groups" class="configured-list"></div></div>
           </div>
           <p class="data-directory" id="data-directory"></p>
+          </details>
         </div>
-        <div id="settings-general" class="settings-section" hidden><div class="config-block"><h3>常规参数</h3><p class="subtle">在线探测、同步间隔与重启监控。</p><div id="general-fields" class="field-grid"></div></div></div>
+        <div id="settings-general" class="settings-section" hidden><div class="config-block"><h3>常规参数</h3><p class="subtle">在线探测、同步间隔与重启监控。</p><div id="general-fields" class="field-grid"></div><details id="general-advanced" class="advanced-options"><summary>更多设置 · 查询、重启、备份与通知</summary><div id="general-advanced-fields" class="field-grid"></div></details></div></div>
         <div id="settings-commands" class="settings-section" hidden>
-          <div class="config-block"><h3>指令别名</h3><p class="subtle">多个别名用逗号分隔，固定入口 /mc 保留。</p><div id="command-fields" class="field-grid"></div></div>
+          <div class="config-block"><h3>指令别名</h3><p class="subtle">多个别名用逗号分隔，固定入口 /mc 保留。</p><div id="command-fields" class="field-grid"></div><details id="command-advanced" class="advanced-options"><summary>更多指令别名</summary><div id="command-advanced-fields" class="field-grid"></div></details></div>
           <div class="config-block"><div class="section-head"><h3>帮助菜单</h3><button id="preview-help" class="secondary">预览菜单</button></div><div id="help-field"></div><pre id="help-preview" class="template-preview" hidden></pre></div>
         </div>
-        <div id="settings-messages" class="settings-section" hidden><div class="config-block"><h3>回复与广播</h3><p class="subtle">使用变量插入玩家、服务器与操作结果。</p><div id="message-fields" class="message-grid"></div></div></div>
+        <div id="settings-bridge" class="settings-section" hidden>
+          <div class="config-block"><h3>群与游戏消息互通</h3><p class="subtle">默认关闭。开启下方群绑定会同时开启总开关；总开关可暂停所有群的互通。仅在关联服务器与群之间转发。</p><div id="bridge-fields" class="field-grid"></div></div>
+          <div class="config-block"><h3>群绑定与转发范围</h3><p class="field-hint">每组可选择转发方向与事件。开启后在每个实际群发送一条普通文字或 /mc 以记录会话。游戏事件读取服务端新增日志，日志路径与编码可在服务器编辑窗口修改。</p><div id="bridge-group-fields"></div></div>
+          <div class="config-block"><h3>消息格式</h3><p class="field-hint">群 → 游戏模板支持 § 染色码，如 §b 青色、§l 加粗、§r 重置。变量：{server} 服名、{server_id} 服ID、{group} 群号、{player} 玩家、{nickname} 群昵称、{user} 用户ID、{message} 正文、{event} 类型。</p><div id="bridge-message-fields" class="message-grid"></div></div>
+        </div>
+        <div id="settings-messages" class="settings-section" hidden><div class="config-block">
+          <h3>全部消息模板</h3><p class="subtle">回复、错误、状态明细、TPS 摘要、日志和游戏广播均可修改。留空可隐藏该段文字；完整回复留空则不发送消息。</p>
+          <div class="message-filters"><label for="message-search">查找文案<input id="message-search" type="search" placeholder="搜索文字、模板名或变量，如 白名单 / sync / {server}"></label><label for="message-category">分类<select id="message-category"><option value="common">常用回复</option></select></label></div>
+          <p id="message-count" class="field-hint" aria-live="polite"></p><p class="field-hint">点击变量可插入光标处；{{ 和 }} 表示普通花括号。修改后点击顶部“保存并生效”。帮助、互通和 TPS 页的专用编辑器同步显示当前输入。</p>
+          <div id="message-fields" class="message-grid"></div><button id="message-more" class="secondary" type="button" hidden>显示更多模板</button>
+        </div></div>
         <div id="settings-spark" class="settings-section" hidden>
-          <div class="config-block"><h3>TPS 查询方式</h3><p class="subtle">按服务器选择原生 TPS 或 spark，并填写查询指令。</p><div id="tps-server-fields" class="tps-server-grid"></div></div>
-          <div class="config-block"><div class="section-head"><h3>spark 回复模板</h3><button id="spark-defaults" class="secondary">使用 spark 默认配置</button></div><p id="spark-template-hint" class="subtle"></p><div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div><div id="spark-message-fields"></div>
-            <details id="tps-variable-details"><summary>查看指标变量</summary><div class="table-wrap"><table><thead><tr><th>变量</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div><p class="field-hint">med 为中位数，P95 为第 95 百分位。CPU 变量不包含 %。</p></details>
-            <details class="help-disclosure"><summary>spark 回复为空时</summary><p>为 MC 启动命令添加 companion/astrbot-spark-agent.jar 采集器。它每 2 秒更新本地指标；auto 数据来源会优先读取有效报告。</p></details>
+          <div class="config-block"><h3>TPS 查询设置</h3><p class="subtle">按服务器选择查询指令和输出格式。所有支持的 TPS 数据都可填入变量模板；未知内容保留原文。</p><div id="tps-server-fields" class="tps-server-grid"></div></div>
+
+          <div class="config-block"><div class="section-head"><h3>TPS 自定义变量模板</h3><button id="spark-defaults" class="secondary">恢复初始模板</button></div><p id="spark-template-hint" class="subtle"></p><div id="spark-fields" class="field-grid"></div><div id="tps-template-field"></div><div id="spark-message-fields"></div>
+            <p class="field-hint">完整指标、状态和查询变量见“变量文档”，支持搜索、分类和模板预览。</p>
+            <details class="help-disclosure"><summary>spark 回复为空时</summary><p>控制台有 spark 报告但 RCON 为空时，可在上方展开“新增日志回读”，开启并设置 logs/latest.log。只读取本次命令之后新增的报告，无需 Java 采集器或额外 JVM 参数。执行 spark tps 时自动适用；不会补造缺失指标。</p></details>
           </div>
         </div>
-        <div id="settings-advanced" class="settings-section" hidden><div class="config-block"><div class="section-head"><div><h3>高级 JSON</h3><p class="subtle">批量修改配置后，先应用到表单，再保存。</p></div><button id="apply-json" class="secondary">应用到表单</button></div><label for="config-editor" class="sr-only">完整配置 JSON</label><textarea id="config-editor" spellcheck="false" aria-label="配置 JSON"></textarea></div></div>
+        <div id="settings-variables" class="settings-section" hidden>
+          <div class="config-block"><h3>查询与状态变量</h3><p class="subtle">所有支持的 TPS 查询结果都可将实际返回数据转成变量，使用可编辑的机器人模板。按数据格式查看可提供的字段；状态和玩家回复另支持人数、来源和缓存。</p>
+            <div class="field-grid variable-filters"><div class="config-field"><label for="variable-search">搜索变量或说明</label><input id="variable-search" type="search" placeholder="例如 CPU、人数、来源"></div><div class="config-field"><label for="variable-group">分类</label><select id="variable-group"><option value="">全部分类</option><option>TPS</option><option>Tick 耗时</option><option>CPU</option><option>查询信息</option><option>服务器状态</option><option>辅助</option><option>跨核心变量</option></select></div><div class="config-field"><label for="variable-scope">适用模板</label><select id="variable-scope"><option value="">全部模板</option><option value="spark">TPS 变量模板</option><option value="status">服务器状态</option><option value="players">在线玩家</option></select></div></div>
+            <div class="config-field"><label for="variable-format">数据格式 / 核心</label><select id="variable-format"><option value="">全部格式</option><option value="spark">spark</option><option value="paper">Paper / Spigot</option><option value="forge">Forge / NeoForge</option><option value="tick">原版 tick query</option><option value="custom">自定义回复</option><option value="status">状态 / 玩家</option></select></div>
+            <p id="variable-count" class="field-hint" role="status"></p><p class="field-hint">手机可左右滑动变量表查看完整说明与示例。</p>
+            <details id="tps-variable-details"><summary>变量表 · 点击变量插入预览模板</summary><div class="table-wrap"><table><thead><tr><th>变量</th><th>分类 / 适用</th><th>含义</th><th>单位</th><th>示例</th></tr></thead><tbody id="tps-variables"></tbody></table></div></details>
+            <p class="field-hint">CPU 变量不含 %，请在模板加 %；耗时单位为 ms。缺失值显示“暂无数据”，不会填充 0 或 20。RCON 不可用时显示失败，未知指标不会填为正常值。</p>
+          </div>
+          <div class="config-block"><h3>模板预览</h3><p class="subtle">提供通用、spark、Paper/Spigot、Forge/NeoForge、原版和自定义输出初始模板。每个样例只填它实际有的数据，不连接服务器；确认预览后直接保存生效。</p><div class="field-grid"><div class="config-field"><label for="variable-preview-kind">目标模板</label><select id="variable-preview-kind"><option value="tps">TPS 变量模板</option><option value="status">服务器状态</option><option value="players">在线玩家</option></select></div><div class="config-field"><label for="variable-example-kind">TPS 初始输出示例</label><select id="variable-example-kind"></select></div><div class="buttons"><button id="variable-example" class="secondary" type="button">载入所选示例</button><button id="variable-save" type="button">保存当前模板</button></div></div><label for="variable-preview-template">预览模板</label><textarea id="variable-preview-template" rows="7" spellcheck="false"></textarea><p id="variable-preview-warning" class="field-hint" role="status"></p><pre id="variable-preview-result" class="help-preview"></pre><p class="field-hint">只支持 {变量}，字面花括号写 {{ 和 }}；不支持属性访问、表达式或 :.2f 格式。预览编辑只有点击“保存当前模板”后才会生效。</p></div>
+        </div>
+        <div id="settings-advanced" class="settings-section" hidden><div class="config-block"><div class="section-head"><div><h3>高级 JSON</h3><p class="subtle">修改后可直接保存，也可先预览到表单。</p></div><button id="apply-json" class="secondary">预览到表单</button></div><label for="config-editor" class="sr-only">完整配置 JSON</label><textarea id="config-editor" spellcheck="false" aria-label="配置 JSON"></textarea></div></div>
       </section>
       <section id="feedback" class="output-panel" aria-labelledby="output-title" hidden><div class="section-head"><h2 id="output-title">操作结果</h2><button id="clear-output" class="quiet-button" type="button">清除</button></div><pre id="output"></pre></section>
       <footer class="page-footer">共享服务器 · 按配置组管理白名单</footer>
@@ -120,7 +161,7 @@
   </div>
   <dialog id="confirm-dialog"><form method="dialog"><div class="dialog-heading"><h2>确认操作</h2></div><p id="confirm-text"></p><div class="dialog-actions buttons"><button value="cancel" class="secondary">取消</button><button value="confirm" class="danger">确认</button></div></form></dialog>
   <dialog id="edit-dialog"><form id="edit-form"><div class="dialog-heading"><h2>修改玩家名</h2></div><label for="edit-player">新玩家名</label><input id="edit-player" placeholder="输入新玩家名" pattern="[A-Za-z0-9_]{3,16}" maxlength="16" required><div class="dialog-actions buttons"><button type="button" id="edit-cancel" class="secondary">取消</button><button type="submit">保存修改</button></div></form></dialog>
-  <dialog id="config-dialog" class="config-dialog"><form id="entity-form"><div class="section-head dialog-heading"><h2 id="entity-title">编辑配置</h2><button type="button" id="entity-close" class="quiet-button" aria-label="关闭配置编辑">关闭</button></div><p id="entity-intro" class="subtle"></p><div id="entity-fields" class="field-grid"></div><p id="entity-error" class="form-error" role="alert" hidden></p><div class="dialog-actions buttons"><button type="button" id="entity-cancel" class="secondary">取消</button><button type="submit" id="entity-apply">加入配置草稿</button></div></form></dialog>
+  <dialog id="config-dialog" class="config-dialog"><form id="entity-form"><div class="section-head dialog-heading"><h2 id="entity-title">编辑配置</h2><button type="button" id="entity-close" class="quiet-button" aria-label="关闭配置编辑">关闭</button></div><p id="entity-intro" class="subtle"></p><div id="entity-fields" class="field-grid"></div><details id="entity-advanced" class="advanced-options"><summary>更多选项 · 内部标识、连接与权限</summary><div id="entity-advanced-fields" class="field-grid"></div></details><p id="entity-test-result" class="connection-result" role="status" hidden></p><p id="entity-error" class="form-error" role="alert" hidden></p><div class="dialog-actions buttons"><button type="button" id="entity-cancel" class="secondary">取消</button><button type="button" id="entity-test" class="secondary">测试连接</button><button type="submit" id="entity-save">保存并生效</button></div></form></dialog>
   <dialog id="bulk-import-dialog" class="config-dialog"><div class="section-head"><h2>批量导入白名单</h2><button id="bulk-close" class="quiet-button">关闭</button></div><label for="bulk-format">格式</label><select id="bulk-format"><option value="text">每行一个玩家名</option><option value="json">JSON</option><option value="csv">CSV（name,owner）</option></select><label for="bulk-data">待导入内容（最多 500 条）</label><textarea id="bulk-data" rows="8" placeholder="Steve&#10;Alex"></textarea><p class="field-hint">先预览再导入。已有同名同 UUID 条目会跳过；未填写 owner 的新条目由管理员管理。</p><pre id="bulk-preview" class="ops-preview" hidden></pre><div class="buttons dialog-actions"><button id="bulk-preview-button" class="secondary">校验并预览</button><button id="bulk-apply" disabled>确认导入</button></div></dialog>
   <dialog id="bulk-owner-dialog"><form id="bulk-owner-form"><h2>转移条目归属</h2><label for="bulk-owner">新的平台用户 ID</label><input id="bulk-owner" maxlength="128" placeholder="留空转为管理员管理"><p class="field-hint">原归属用户会失去修改这些条目的权限。</p><div class="buttons dialog-actions"><button id="bulk-owner-cancel" type="button" class="secondary">取消</button><button type="submit">确认转移</button></div></form></dialog>
   <script type="module" src="./app.js"></script>

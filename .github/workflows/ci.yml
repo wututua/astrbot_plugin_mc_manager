@@ -31,10 +31,6 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "8"
       - name: Install development dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Download fixed AstrBot SDK
@@ -88,28 +84,3 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
-  agent:
-    name: Agent · Java ${{ matrix.java }}
-    timeout-minutes: 10
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        java: ["8", "17", "21"]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java }}
-      - name: Check Linux startup script
-        run: bash -n companion/start-with-spark-agent.example.sh
-      - name: Build Java 8 compatible agent
-        run: python tools/build_spark_agent.py
-      - name: Run real JVM sampling checks
-        run: python -m unittest discover -s tests -p test_spark_file.py -v

@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-DIRECTORIES = ("mc_manager", "pages", ".astrbot-plugin", "docs", "companion")
+DIRECTORIES = ("mc_manager", "pages", ".astrbot-plugin", "docs")
 FILES = (
     "main.py",
     "metadata.yaml",
@@ -22,6 +22,7 @@ FILES = (
     "config.example.json",
     "config.default.json",
     "tps.variables.json",
+    "messages.variables.json",
 )
 REQUIRED_FIELDS = ("name", "desc", "version", "author")
 
@@ -100,6 +101,8 @@ def build(output_directory: Path | None = None) -> Path:
                 relative = path.relative_to(ROOT / "pages").as_posix()
                 if archive.read(prefix + "pages/" + relative) != archive.read(prefix + "views/" + relative):
                     raise ValueError("The pages and views entry files must match")
+        if any("/companion/" in name or name.endswith("astrbot-spark-agent.jar") for name in entries):
+            raise ValueError("ZIP contains the removed Java collector")
         if any(".research" in n or "sqlite" in n or "__pycache__" in n for n in entries):
             raise ValueError("ZIP contains a research, database, or cache file")
     print(f"Built {output} ({output.stat().st_size:,} bytes; {len(entries)} files)")

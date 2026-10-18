@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from .config import MCError
+from .message_catalog import text as message_text
 
 
 class OperationsStore:
@@ -83,7 +84,7 @@ class OperationsStore:
         with self.transaction():
             row = self.db.execute("SELECT * FROM outbox WHERE id=?", (identifier,)).fetchone()
             if not row or (scope and row["scope"] != scope):
-                raise MCError("未找到当前配置组的通知。")
+                raise MCError(message_text("error_operations_store_001"))
             self.db.execute(
                 "UPDATE outbox SET state='pending',attempts=0,next_attempt=0,last_error='',created=? WHERE id=?",
                 (datetime.now(timezone.utc).isoformat(timespec="seconds"), identifier),
@@ -114,7 +115,7 @@ class OperationsStore:
                         stamp = stamp.replace(tzinfo=timezone.utc)
                     normalized = stamp.astimezone(timezone.utc).isoformat(timespec="seconds")
                 except ValueError:
-                    raise MCError("日期格式应为 ISO 8601，例如 2026-10-16T00:00:00+08:00。") from None
+                    raise MCError(message_text("error_operations_store_003")) from None
                 clauses.append("time" + operator + "?")
                 values.append(normalized)
         return " AND ".join(clauses), values
@@ -173,7 +174,7 @@ class OperationsStore:
                 ),
             )
         except sqlite3.IntegrityError:
-            raise MCError("你已有待审核的申请，请等待管理员处理。") from None
+            raise MCError(message_text("error_operations_store_002")) from None
         return cursor.lastrowid
 
     def pending_requests(self, scope: str, user: str = "") -> list[dict]:

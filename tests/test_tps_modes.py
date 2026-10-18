@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from logger_stub import logger_stub
 from test_spark import SAMPLE
 
 from mc_manager.config import Actor, MCError, Settings
@@ -41,8 +42,8 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
         self.raw = {
             "server_root": str(self.root),
             "servers": [
-                {"id": "s1", "tps_mode": "native"},
-                {"id": "s2", "rcon_port": 25576, "tps_mode": "spark"},
+                {"id": "s1", "tps_mode": "native", "tps_output": "raw"},
+                {"id": "s2", "rcon_port": 25576, "tps_mode": "spark", "tps_output": "template"},
             ],
             "groups": [{"id": "g1", "platform_id": "bot", "group_id": "100", "server_ids": ["s1", "s2"]}],
         }
@@ -50,7 +51,7 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
         async def send(*_):
             return True
 
-        self.service = Service(Settings(self.raw), self.root / "data", send, Client)
+        self.service = Service(Settings(self.raw), self.root / "data", send, Client, logger=logger_stub())
         self.actor = Actor("bot", "100", "member")
 
     async def asyncTearDown(self):
@@ -70,7 +71,7 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
         del self.raw["servers"][1]["tps_mode"]
         self.apply()
         result = await self.service.execute(self.actor, "tps", ["s2"])
-        self.assertEqual(self.service.settings.servers["s2"].tps_mode, "spark")
+        self.assertFalse(hasattr(self.service.settings.servers["s2"], "tps_mode"))
         self.assertEqual(self.commands, [("s2", "spark tps")])
         self.assertIn("13.24 / 13.37", result)
 
@@ -95,8 +96,8 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
     async def test_native_ignores_local_collector_and_spark_only_settings(self):
         self.raw["servers"][0].update(tps_source="file", spark_file="../outside.txt")
         self.apply()
-        with patch("mc_manager.service.read_spark_report", side_effect=AssertionError("native must not read files")):
-            result = await self.service.execute(self.actor, "tps", ["s1"])
+        result = await self.service.execute(self.actor, "tps", ["s1"])
+        self.assertNotIn("spark_file", self.service.settings.raw["servers"][0])
         self.assertEqual(result, self.responses["s1"])
         self.assertEqual(self.commands, [("s1", "tps")])
 
@@ -118,7 +119,9 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
         for value in ["", "   \n"]:
             with self.subTest(value=value):
                 self.responses["s1"] = value
-                self.assertEqual(await self.service.execute(self.actor, "tps", ["s1"]), "服务端返回空响应")
+                result = await self.service.execute(self.actor, "tps", ["s1"])
+                self.assertIn("服务端返回空响应", result)
+                self.assertIn("日志", result)
 
     async def test_native_connection_failure_remains_an_rcon_error(self):
         self.responses["s1"] = OSError("connection refused")
@@ -140,7 +143,7 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.commands, [("s1", "tps"), ("s2", "spark tps")])
 
     async def test_multiple_native_servers_keep_full_ordered_replies(self):
-        self.raw["servers"][1]["tps_mode"] = "native"
+        self.raw["servers"][1].update(tps_mode="native", tps_output="raw")
         self.apply()
         self.responses["s1"] = "FIRST\n" * 3000
         self.responses["s2"] = "SECOND\n" * 3000
@@ -152,12 +155,14 @@ class TPSModeTests(unittest.IsolatedAsyncioTestCase):
             await self.service.execute(Actor("bot", "200", "member"), "tps", ["s1"])
         self.assertEqual(self.commands, [])
 
-    def test_invalid_mode_is_rejected(self):
+    def test_retired_selector_is_ignored_and_removed(self):
         for value in ["other", "", None, True, ["native"], {"mode": "spark"}]:
             raw = copy.deepcopy(self.raw)
-            raw["servers"][0]["tps_mode"] = value
-            with self.subTest(value=value), self.assertRaisesRegex(MCError, "TPS 查询方式"):
-                Settings(raw)
+            raw["servers"][0].update(tps_mode=value, tps_command="custom:perf")
+            with self.subTest(value=value):
+                settings = Settings(raw)
+                self.assertEqual(settings.servers["s1"].tps_command, "custom:perf")
+                self.assertNotIn("tps_mode", settings.raw["servers"][0])
 
     def test_native_query_still_rejects_multiline_or_empty_commands(self):
         for command in ["", "tps\nstop", "tps\x00", "x" * 513]:

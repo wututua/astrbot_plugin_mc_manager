@@ -10,13 +10,18 @@ from pathlib import Path
 
 from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.api.web import error_response, json_response, request
 
-from .mc_manager.config import Actor, MCError, Settings, positive
+from .mc_manager.config import Actor, MCError, Settings, message_templates, positive, without_collector_config
 from .mc_manager.dashboard import DashboardOperationsMixin
+from .mc_manager.message_catalog import text as message_text
+from .mc_manager.onboarding import SetupPlans
+from .mc_manager.performance import template_examples
 from .mc_manager.service import Service
 from .mc_manager.spark import DEFAULT_TPS_TEMPLATE, variables_table
+from .mc_manager.storage_errors import capacity_issue, capacity_message
 from .mc_manager.store import Store
 from .mc_manager.text import message_chunks
 
@@ -51,16 +56,36 @@ class MCCommandFilter(filter.CustomFilter):
         return True
 
 
+class MCBridgeFilter(filter.CustomFilter):
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        settings = MCCommandFilter.settings
+        if settings is None or not settings.bridge_enabled or event.is_private_chat():
+            return False
+        user = str(event.get_sender_id() or "")
+        if not user or user == str(event.get_self_id() or ""):
+            return False
+        text = str(getattr(event.message_obj, "message_str", "") or event.get_message_str()).strip()
+        first = text.split(maxsplit=1)[0].removeprefix("/").casefold() if text else ""
+        if first in {"mc", *(prefix.casefold() for prefix in settings.prefixes)}:
+            return False
+        try:
+            group = settings.group_for(Actor(str(event.get_platform_id() or ""), str(event.get_group_id() or ""), user))
+            return group.bridge_enabled and (group.bridge_to_game or group.bridge_to_group)
+        except MCError:
+            return False
+
+
 class MCManagerPlugin(DashboardOperationsMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context, config)
         self.config = config
         self.config_error = ""
+        self.setup_plans = SetupPlans()
         try:
             self.settings = Settings(dict(config))
         except MCError as exc:
-            self.config_error = str(exc)
             self.settings = self._recovery_settings()
+            self.config_error = self.settings.localize(exc)
         self.service: Service | None = None
         self.guard = asyncio.Lock()
         self.active_operations = 0
@@ -85,9 +110,10 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                 self.operations_idle.set()
 
     def _new_service(self, settings):
-        return Service(settings, self.data_dir, self._send)
+        return Service(settings, self.data_dir, self._send, logger=self.logger)
 
     def _install_service(self, settings, service, error=""):
+        self.setup_plans.clear()
         self.settings = settings
         self.service = service
         self.config_error = error
@@ -98,7 +124,16 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
         commands = self.config.get("commands", {})
         prefix = commands.get("prefix", "mc") if isinstance(commands, dict) else "mc"
         try:
-            return Settings({"commands": {"prefix": prefix}})
+            candidate = {"commands": {"prefix": prefix}}
+            raw_messages = self.config.get("messages", {})
+            if isinstance(raw_messages, dict):
+                for key, value in raw_messages.items():
+                    try:
+                        Settings({"messages": {key: value}})
+                    except MCError:
+                        continue
+                    candidate.setdefault("messages", {})[key] = value
+            return Settings(candidate)
         except MCError:
             return Settings({})
 
@@ -122,14 +157,14 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             self._register_web_apis()
             if self.service is None and not self.config_error:
                 try:
-                    self.service = Service(self.settings, self.data_dir, self._send)
+                    self.service = Service(self.settings, self.data_dir, self._send, logger=self.logger)
                     await self.service.start()
                 except (MCError, sqlite3.DatabaseError, OSError) as exc:
                     if self.service is not None:
                         await self.service.close()
                         self.service = None
-                    self.config_error = str(exc)
                     self.settings = self._recovery_settings()
+                    self.config_error = self.settings.localize(exc)
                     MCCommandFilter.settings = self.settings
         if self.config_error:
             self.logger.warning("MC 配置待修正，管理页面可用于修复：%s", self.config_error)
@@ -137,18 +172,20 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             self.logger.info("MC 管理插件已加载；群与服务器配置在插件配置页或管理面板中填写。")
 
     async def _send(self, origin: str, text: str) -> bool:
+        if not text.strip():
+            return True
         try:
             chain = MessageChain().message(text)
             return bool(await self.context.send_message(origin, chain))
         except Exception:
-            self.logger.exception("MC 重启广播发送失败，将在后续同步周期重试")
+            self.logger.exception("MC 群消息发送失败，详细状态请查看管理面板")
             return False
 
     def _service(self) -> Service:
         if self.config_error:
-            raise MCError("配置待修正：" + self.config_error + " 请打开管理面板修正后保存。")
+            raise MCError(message_text("error_main_001", config_error=self.config_error))
         if self.service is None or self.service.closed:
-            raise MCError("插件尚未初始化或已卸载。")
+            raise MCError(message_text("error_main_002"))
         return self.service
 
     def _verified_chat_admin(self, event: AstrMessageEvent, user: str) -> bool:
@@ -191,7 +228,9 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             result = self.settings.render("error", error=exc)
         except Exception:
             self.logger.exception("MC 指令处理失败")
-            result = self.settings.render("error", error="内部错误，请管理员检查 AstrBot 日志和同步状态。")
+            result = self.settings.render("error", error=message_text("internal_error"))
+        if not result.strip():
+            return
         replies = message_chunks(result)
         if len(replies) > 1:
             # A stopped framework event may consume only the first yielded
@@ -201,16 +240,37 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             return
         yield event.plain_result(result)
 
+    @filter.custom_filter(MCBridgeFilter)
+    async def relay_group_message(self, event: AstrMessageEvent):
+        """将已绑定群的普通文字转发至游戏，不拦截其他插件处理。"""
+        try:
+            actor = Actor(
+                str(event.get_platform_id() or ""),
+                str(event.get_group_id() or ""),
+                str(event.get_sender_id() or ""),
+                event.get_sender_name(),
+                False,
+                event.unified_msg_origin,
+            )
+            text = "".join(part.text for part in event.get_messages() if isinstance(part, Plain))
+            message_id = str(getattr(event.message_obj, "message_id", "") or "")
+            async with self.operation() as service:
+                service.relay_group(actor, text, message_id)
+        except MCError:
+            return
+        except Exception:
+            self.logger.exception("MC 群消息转发失败")
+
     def _page_admin(self):
         # Dashboard's plugin-extension routes require a logged-in dashboard
         # administrator. Require its public API identity as defense in depth.
         if not request.username:
-            raise MCError("请先登录 AstrBot 管理后台。")
+            raise MCError(message_text("error_main_003"))
 
     def _group(self, group_id: str):
         group = self.settings.groups.get(group_id)
         if not group:
-            raise MCError("请选择一个已配置的群。")
+            raise MCError(message_text("error_main_004"))
         return group
 
     async def page_snapshot(self):
@@ -269,7 +329,7 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             self._page_admin()
             payload = await request.json(default={})
             if not isinstance(payload, dict):
-                raise MCError("请求必须是 JSON 对象。")
+                raise MCError(message_text("error_main_006"))
             action = payload.get("action")
             if action not in {
                 "add",
@@ -289,10 +349,10 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                 "reject",
                 "mine",
             }:
-                raise MCError("不支持该操作。")
+                raise MCError(message_text("error_main_007"))
             args = payload.get("args", [])
             if not isinstance(args, list) or len(args) > 2 or any(not isinstance(a, str) or len(a) > 128 for a in args):
-                raise MCError("参数格式无效。")
+                raise MCError(message_text("error_main_008"))
             async with self.operation() as service:
                 group = self._group(str(payload.get("group", "")))
                 # The dashboard operator is distinct from every chat user.
@@ -353,15 +413,21 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
         try:
             self._page_admin()
             async with self.guard:
-                payload = self._redact_passwords(copy.deepcopy(dict(self.config)))
+                payload = self._redact_passwords(without_collector_config(copy.deepcopy(dict(self.config))))
                 if not self.config_error:
                     payload["commands"] = dict(self.settings.commands)
+                    for server in payload.get("servers", []):
+                        known = self.settings.servers.get(str(server.get("id", "")))
+                        if known:
+                            server["tps_output"] = known.tps_output
                 return json_response(
                     {
                         "config": payload,
                         "data_directory": str(self.data_dir),
                         "tps_default_template": DEFAULT_TPS_TEMPLATE,
                         "tps_variables": variables_table(),
+                        "tps_examples": template_examples(),
+                        "message_templates": message_templates(),
                         "schema": self.config_schema,
                         "platforms": self._platform_options(),
                         "revision": self.config_revision,
@@ -381,22 +447,47 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
             await task
             raise
         if committed is False:
-            raise MCError("配置保存被更新的配置覆盖，请重新载入后再试。")
+            raise MCError(message_text("error_main_005"))
 
     async def page_save_config(self):
+        disk_saved = False
         try:
             self._page_admin()
             payload = await request.json(default={})
-            if not isinstance(payload, dict) or not isinstance(payload.get("config"), dict):
-                raise MCError("请求需要 config 对象。")
-            raw = payload["config"]
+            if not isinstance(payload, dict):
+                raise MCError(message_text("error_main_009"))
+            quick = payload.get("quick_setup")
+            if (quick is not None and (not isinstance(quick, dict) or "config" in payload)) or (
+                quick is None and not isinstance(payload.get("config"), dict)
+            ):
+                raise MCError(message_text("error_main_009"))
+            setup_summary = None
             async with self.guard:
                 await self.operations_idle.wait()
                 current = self.service
                 if "revision" in payload and payload["revision"] != self.config_revision:
-                    raise MCError("配置已被其他页面修改，请先重新载入配置后再保存。")
+                    raise MCError(message_text("error_main_010"))
                 if current is not None and current.restart_tasks:
-                    raise MCError("有服务器正在重启，等待重启监控结束后再保存配置。")
+                    raise MCError(message_text("error_main_011"))
+                if quick is not None:
+                    if "revision" not in payload:
+                        raise MCError(message_text("error_setup_expired"))
+                    bindings = self._config_bindings()
+                    if current is not None:
+                        bindings["reserved_servers"] = [
+                            row[0] for row in current.store.db.execute("SELECT server FROM server_history")
+                        ]
+                    raw, setup_summary = await asyncio.to_thread(
+                        self.setup_plans.prepare,
+                        quick,
+                        request.username,
+                        self.config_revision,
+                        copy.deepcopy(dict(self.config)),
+                        bindings,
+                    )
+                else:
+                    raw = payload["config"]
+                raw = without_collector_config(raw)
                 Settings(raw)
                 previous_servers = self.config.get("servers", [])
                 old_servers = (
@@ -408,7 +499,7 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                     if server.get("rcon_password") == "__KEEP__":
                         sid = server.get("id")
                         if sid not in old_servers:
-                            raise MCError("新服务器需要填写密码或密码环境变量。")
+                            raise MCError(message_text("error_main_012"))
                         server["rcon_password"] = old_servers[sid].get("rcon_password", "")
                 histories = {row["id"]: row for row in self._config_bindings()["groups"]}
                 for group in raw.get("groups", []):
@@ -418,28 +509,47 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                 settings = Settings(raw)
                 for group in raw.get("groups", []):
                     group["server_ids"] = list(settings.groups[str(group["id"])].servers)
-                candidate = Service(settings, self.data_dir, self._send, reserve_scopes=False)
+                for server in raw.get("servers", []):
+                    server["tps_output"] = settings.servers[str(server["id"])].tps_output
+                candidate = Service(settings, self.data_dir, self._send, reserve_scopes=False, logger=self.logger)
                 old_config = copy.deepcopy(dict(self.config))
                 paused = False
                 try:
                     self.config.clear()
                     self.config.update(raw)
                     await self._persist_config()
+                    disk_saved = True
                     if current is not None:
                         paused = True
                         await current.pause()
                     operator = Actor("", "", "dashboard:" + request.username, request.username, True)
                     candidate.store.validate_scopes(settings, actor=operator)
-                except BaseException:
+                except BaseException as failure:
                     self.config.clear()
                     self.config.update(old_config)
                     candidate.store.close()
                     if paused and current is not None:
                         current.resume()
-                    try:
-                        await self._persist_config()
-                    except Exception:
-                        self.logger.exception("MC 配置回滚保存失败，当前实例仍使用原配置")
+                    # Supported AstrBot writers flush a same-directory temp
+                    # snapshot before os.replace. A first capacity failure has
+                    # not replaced the old file, so retrying a rollback only
+                    # repeats the same failure while the disk remains full.
+                    initial_capacity_failure = (
+                        not disk_saved and isinstance(failure, OSError) and capacity_issue(failure)
+                    )
+                    if not initial_capacity_failure:
+                        try:
+                            await self._persist_config()
+                            disk_saved = False
+                        except Exception as rollback_error:
+                            self.logger.exception("MC 配置回滚写盘失败；实例保留原配置，磁盘配置可能不同")
+                            if not isinstance(failure, asyncio.CancelledError):
+                                detail = (
+                                    capacity_message(rollback_error, "回滚配置")
+                                    if capacity_issue(rollback_error)
+                                    else "请检查 AstrBot 日志和配置目录的写入状态。"
+                                )
+                                raise MCError(message_text("error_main_013", detail=detail)) from rollback_error
                     raise
                 if current is not None:
                     await current.close()
@@ -448,17 +558,31 @@ class MCManagerPlugin(DashboardOperationsMixin, Star):
                 MCCommandFilter.settings = settings
                 self.service = candidate
                 self.config_revision = secrets.token_urlsafe(18)
+                self.setup_plans.clear()
                 await candidate.start()
-            return json_response({"message": "配置已保存并立即生效。"})
+            response = {"message": "配置已保存并立即生效。"}
+            if setup_summary is not None:
+                response["setup"] = setup_summary
+            return json_response(response)
         except (MCError, TypeError, ValueError, KeyError) as exc:
             return error_response(str(exc))
-        except Exception:
+        except Exception as exc:
+            if capacity_issue(exc):
+                detail = (
+                    "配置已写入，但服务切换未完成；请释放空间后重载插件并核对配置。"
+                    if disk_saved
+                    else "本次修改未生效，当前仍保留原配置。"
+                )
+                message = capacity_message(exc) + detail
+                self.logger.warning("MC %s", message)
+                return error_response(message)
             self.logger.exception("MC 配置保存失败")
             return error_response("配置保存失败，请查看 AstrBot 日志。")
 
     async def terminate(self):
         async with self.guard:
             await self.operations_idle.wait()
+            self.setup_plans.clear()
             if self.service:
                 await self.service.close()
                 self.service = None

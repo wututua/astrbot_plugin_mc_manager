@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from logger_stub import logger_stub
 from test_core import FakeRcon
 
 from mc_manager.config import Actor, MCError, Settings
@@ -53,7 +54,7 @@ class SharingTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.offline = set()
         FakeRcon.disconnected = True
         FakeRcon.startup_fail = False
-        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon)
+        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon, logger=logger_stub())
         self.service.settings.poll_interval = 0.001
         # Hosted Windows timers and file flushes can exceed a few milliseconds.
         self.service.settings.restart_timeout = 1
@@ -267,7 +268,7 @@ class SharingTests(unittest.IsolatedAsyncioTestCase):
         async def send(origin, text):
             return True
 
-        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon)
+        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon, logger=logger_stub())
         self.assertEqual(self.service.store.entries("g1"), before)
         columns = {row[1]: row[5] for row in self.service.store.db.execute("PRAGMA table_info(bindings)")}
         self.assertEqual(columns, {"server": 1, "scope": 2})

@@ -13,7 +13,7 @@ let bulkPreviewToken = '';
 let bulkPreviewErrors = false;
 const selectedEntries = new Set();
 let running = false;
-const settings = createSettings({ api, work, notice, output, confirmAction, refresh: () => loadSnapshot(false) });
+const settings = createSettings({ api, work, notice, output, confirmAction, refresh: () => loadSnapshot(false), onQuickSaved: async summary=>{await loadSnapshot(false,summary?.group_id);await selectTab('overview');} });
 const operations = createOperations({api,work,notice,confirmAction,group:()=>$('group').value,onRestored:async()=>{await settings.load(true);await loadSnapshot(false);}});
 
 function node(tag, text, className) {
@@ -87,7 +87,7 @@ function renderServers() {
   if (!group) {
     const empty = node('div', undefined, 'empty');
     const configure = node('button', '添加服务器与群聊');
-    configure.addEventListener('click', () => work(() => selectTab('settings')));
+    configure.addEventListener('click',()=>work(async()=>{await selectTab('settings');settings.beginSetup();}));
     empty.append(node('h3', '开始管理你的服务器'), node('p', '先配置服务端目录、连接信息和群聊绑定。'), configure);
     container.append(empty);
     return;
@@ -95,7 +95,7 @@ function renderServers() {
   for (const server of snapshot.servers.filter(s => group.server_ids.includes(s.id))) {
     const card = node('article', undefined, 'card');
     const head = node('div', undefined, 'card-head');
-    const status = server.status === '在线' ? ['在线', 'online'] : server.status === '重启中' ? ['重启中', 'restarting'] : server.status.includes('离线') ? ['离线', 'offline'] : [server.status === '探测中' ? '检测中' : '待检测', ''];
+    const status = server.status === '在线' ? ['在线', 'online'] : server.status === '重启中' ? ['重启中', 'restarting'] : server.status.includes('离线') ? ['离线', 'offline'] : server.status.includes('异常') ? ['查询异常', 'warning'] : server.status.includes('超时') ? ['探测超时', 'warning'] : [server.status === '探测中' ? '检测中' : '待检测', ''];
     const badge = node('span', status[0], 'badge ' + status[1]); badge.title = server.status;
     head.append(node('h3', server.name), badge);
     const directory = node('details', undefined, 'server-directory');
@@ -109,11 +109,16 @@ function renderServers() {
     const job=(snapshot.jobs || []).find(item=>item.server===server.id && item.status==='running');
     if(job){card.append(node('p','重启进度：'+(job.detail || job.phase),'pending'));if(['queued','countdown'].includes(job.phase))buttons.append(actionButton('取消重启','cancel',[server.id],'确认取消 '+server.name+' 的倒计时？'));}
     if(server.status_checked) card.append(node('p','上次探测：'+new Date(server.status_checked).toLocaleTimeString('zh-CN'),'field-hint'));
+    if(server.status_latency_ms !== undefined) card.append(node('p',`${server.status_source || 'RCON'} · ${server.status_command || 'list'} · ${server.status_latency_ms} ms`, 'field-hint'));
+    if(server.players_online !== undefined) card.append(node('p',`在线人数：${server.players_online} / ${server.players_max ?? '暂无数据'}`, 'field-hint'));
+    if(server.status_error) card.append(node('p',`查询说明：${server.status_error}`, 'pending'));
+    const configure=node('button',server.status.includes('离线')?'修复连接':'配置','secondary');
+    configure.addEventListener('click',()=>work(async()=>{await selectTab('settings');settings.editServer(server.id);}));buttons.append(configure);
     card.append(buttons);
     container.append(card);
   }
 }
-async function loadSnapshot(probe) {
+async function loadSnapshot(probe, preferredGroup = '') {
   snapshot = await api('apiGet', 'snapshot', { probe: probe ? '1' : '0' });
   $('configuration-error').hidden = !snapshot.config_error;
   $('configuration-error').textContent = snapshot.config_error ? '配置待修正：' + snapshot.config_error : '';
@@ -121,7 +126,7 @@ async function loadSnapshot(probe) {
   $('group-count').textContent = snapshot.groups.reduce((total, group) => total + (group.group_ids?.length || 1), 0);
   $('pending-count').textContent = snapshot.servers.filter(s => s.pending).length;
   $('notification-count').textContent = snapshot.notifications_pending;
-  const selected = $('group').value;
+  const selected = preferredGroup || $('group').value;
   $('group').replaceChildren();
   for (const group of snapshot.groups) {
     const option = node('option', `${group.id} · ${group.group_id}`);
@@ -227,6 +232,8 @@ await work(async () => {
   if (snapshot.config_error) {
     await selectTab('settings');
     notice('插件已加载，请在下方修正群或服务器配置后保存。', true);
+  } else if(!snapshot.servers.length || !snapshot.groups.length){
+    await selectTab('settings');settings.beginSetup();notice('填写服务端目录和群号，扫描后即可完成配置。');
   } else notice('后台已连接，服务器状态自动更新。');
 });
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .monitoring import QUERY_VARIABLES, STATUS_VARIABLES
 from .text import safe_text
 
 # (variable, explanation, unit, example from the user's spark response)
@@ -33,15 +34,15 @@ HELPERS = (
     ("server", "服务器显示名称", "", "服务器 1"),
     ("server_id", "服务器配置 ID", "", "server1"),
     ("tps_command", "配置的控制台命令（RCON 查询时使用）", "", "spark tps"),
-    ("result", "去掉颜色代码后的原始响应（兼容旧模板）", "", "TPS from last ..."),
+    ("result", "当前可读结果；spark/玩家为原始回复，状态为状态说明（兼容旧模板）", "", "TPS from last ..."),
     ("tps_raw", "去掉颜色代码后的原始响应，与 result 相同", "", "TPS from last ..."),
-    ("tps_parse_status", "完整、部分或未解析", "", "完整"),
+    ("tps_parse_status", "spark：完整/部分/未解析；其他格式：已解析/部分/未解析", "", "完整"),
     ("tps_missing_fields", "缺失或无效指标的变量名列表", "", "mspt_10s_min, mspt_10s_med"),
     ("tps_warning", "根据 tps_warning 模板生成的缺失提示；完整时为空", "", "部分 spark 数据不可用…"),
 )
 METRIC_FIELDS = frozenset(row[0] for row in METRICS)
 SPARK_FIELDS = METRIC_FIELDS | frozenset(row[0] for row in HELPERS)
-DEFAULT_TPS_TEMPLATE = (
+SPARK_TPS_EXAMPLE_TEMPLATE = (
     "[{server}] spark 性能\n"
     "TPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：\n"
     "{tps_5s} / {tps_10s} / {tps_1m} / {tps_5m} / {tps_15m}\n"
@@ -53,8 +54,14 @@ DEFAULT_TPS_TEMPLATE = (
     "MC进程：{cpu_process_10s} / {cpu_process_1m} / {cpu_process_15m}"
     "{tps_warning}"
 )
+DEFAULT_TPS_TEMPLATE = (
+    "📈 服务器性能 [{server}]\n\n{perf_tps_line}\n{perf_tick_lines}\n{perf_cpu_lines}\n"
+    "{perf_entities_line}\n{perf_memory_line}{perf_notice}\n\n"
+    "ℹ️ 来源：{query_source} | 格式：{perf_format} | 指令：{query_command}\n"
+    "耗时：{query_latency_ms} ms | 缓存：{query_cached}"
+)
 DEFAULT_TPS_WARNING = "\n部分 spark 数据不可用：{tps_missing_fields}\n原始输出：\n{tps_raw}"
-DEFAULT_TPS_ERROR = "[{server}] spark TPS 查询失败或无法解析：\n{tps_raw}"
+DEFAULT_TPS_ERROR = "[{server}] TPS 查询失败或无法解析：\n原始输出：\n{tps_raw}"
 
 NUMBER = r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)"
 TOKEN = rf"(?:\*?{NUMBER}|N/A|NaN|unknown|—|--)"
@@ -67,18 +74,57 @@ HEADER = re.compile(
 STAT_NAMES = {"min": "min", "med": "med", "median": "med", "95%ile": "p95", "p95": "p95", "max": "max"}
 
 
-def variables_table() -> list[dict[str, str]]:
-    return [
-        {
-            "name": name,
-            "placeholder": "{" + name + "}",
-            "description": description,
-            "unit": unit,
-            "example": example,
-            "category": "指标" if name in METRIC_FIELDS else "辅助",
-        }
-        for name, description, unit, example in (*METRICS, *HELPERS)
-    ]
+def variables_table() -> list[dict]:
+    from .performance import PERFORMANCE_VARIABLES, variable_formats
+
+    result = []
+    for name, description, unit, example in (
+        *METRICS,
+        *HELPERS,
+        *QUERY_VARIABLES,
+        *STATUS_VARIABLES,
+        *PERFORMANCE_VARIABLES,
+    ):
+        metric = name in METRIC_FIELDS
+        status = name in {row[0] for row in STATUS_VARIABLES}
+        query = name in {row[0] for row in QUERY_VARIABLES}
+        performance = name in {row[0] for row in PERFORMANCE_VARIABLES}
+        scopes = ["status", "players"] if status else ["spark"]
+        if query and not name.startswith("tps_") or name in {"server", "server_id", "result"}:
+            scopes = ["spark", "status", "players"]
+        group = (
+            ("TPS" if name.startswith("tps_") else "Tick 耗时" if name.startswith("mspt_") else "CPU")
+            if metric
+            else "服务器状态"
+            if status
+            else "查询信息"
+            if query
+            else "跨核心变量"
+            if performance
+            else "辅助"
+        )
+        result.append(
+            {
+                "name": name,
+                "placeholder": "{" + name + "}",
+                "description": description,
+                "unit": unit,
+                "example": example,
+                "category": "指标"
+                if metric
+                else "服务器状态"
+                if status
+                else "查询信息"
+                if query
+                else "跨核心变量"
+                if performance
+                else "辅助",
+                "group": group,
+                "scopes": scopes,
+                "formats": variable_formats(name),
+            }
+        )
+    return result
 
 
 def _number(token: str) -> str | None:

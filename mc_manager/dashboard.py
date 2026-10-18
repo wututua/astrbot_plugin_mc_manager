@@ -13,7 +13,11 @@ from astrbot.api.web import error_response, json_response, request
 
 from .backups import BackupManager
 from .config import Actor, Group, MCError, Settings, positive
+from .connection import probe_connection
+from .message_catalog import text as message_text
+from .onboarding import discover_servers
 from .operations import path_health, utc_now
+from .rcon import Rcon
 from .store import Store
 
 
@@ -25,7 +29,7 @@ def export_rows(rows: list[dict], kind: str, filename: str) -> dict:
             "mime": "application/json;charset=utf-8",
         }
     if kind != "csv":
-        raise MCError("导出格式应为 json 或 csv。")
+        raise MCError(message_text("error_dashboard_001"))
     output = io.StringIO(newline="")
     columns = list(rows[0]) if rows else []
     writer = csv.DictWriter(output, fieldnames=columns)
@@ -65,11 +69,50 @@ class DashboardOperationsMixin:
             else:
                 payload = await request.json(default={})
                 if not isinstance(payload, dict):
-                    raise MCError("操作请求必须是 JSON 对象。")
+                    raise MCError(message_text("error_dashboard_006"))
                 action = str(payload.get("action", ""))
             if action == "restore_apply":
                 return json_response(await self._restore_backup(payload))
             async with self.operation(allow_repair=True) as service:
+                if action == "discover_servers":
+                    if request.method.upper() != "POST":
+                        raise MCError(message_text("error_setup_root"))
+                    try:
+                        async with asyncio.timeout(30):
+                            discovery = await asyncio.to_thread(
+                                discover_servers, payload.get("server_root"), copy.deepcopy(dict(self.config))
+                            )
+                    except TimeoutError:
+                        raise MCError(message_text("error_setup_timeout")) from None
+                    return json_response(self.setup_plans.issue(discovery, request.username, self.config_revision))
+                if action == "test_connection":
+                    if request.method.upper() != "POST" or not isinstance(payload.get("server"), dict):
+                        raise MCError(message_text("error_connection_request"))
+                    row = copy.deepcopy(payload["server"])
+                    if row.get("rcon_password") == "__KEEP__":
+                        saved = next(
+                            (
+                                item
+                                for item in self.config.get("servers", [])
+                                if str(item.get("id")) == str(row.get("id"))
+                            ),
+                            None,
+                        )
+                        if saved is None:
+                            raise MCError(message_text("error_main_012"))
+                        row["rcon_password"] = saved.get("rcon_password", "")
+                    candidate = Settings(
+                        {
+                            "server_root": payload.get("server_root", self.config.get("server_root", "")),
+                            "servers": [row],
+                            "groups": [],
+                            "rcon_timeout": self.settings.rcon_timeout,
+                        }
+                    )
+                    server = next(iter(candidate.servers.values()))
+                    return json_response(
+                        await probe_connection(server, candidate.rcon_timeout, getattr(service, "rcon_factory", Rcon))
+                    )
                 if action == "diagnostics" and service is None:
                     import tempfile
                     from pathlib import Path
@@ -116,7 +159,7 @@ class DashboardOperationsMixin:
                     )
                     return json_response({**preview, "revision": self.config_revision})
                 if service is None:
-                    raise MCError("请先修正配置，或从已有备份恢复。")
+                    raise MCError(message_text("error_dashboard_007"))
                 if action == "backup_create":
                     result = await manager.create(copy.deepcopy(dict(self.config)))
                     return json_response(result)
@@ -165,7 +208,7 @@ class DashboardOperationsMixin:
                     return json_response(await service.bulk_apply(actor, group, str(payload.get("token", ""))))
                 if action in {"bulk_remove", "bulk_transfer"}:
                     if payload.get("confirmed") is not True:
-                        raise MCError("批量修改需要明确确认。")
+                        raise MCError(message_text("error_dashboard_008"))
                     return json_response(
                         await service.bulk_change(
                             actor,
@@ -190,7 +233,7 @@ class DashboardOperationsMixin:
                     rows, total = service.store.filtered_logs(group.id, 1, 10000, **filters)
                     export = export_rows(rows, str(payload.get("format", "csv")), "mc-logs-" + group.id)
                     return json_response({**export, "total": total, "truncated": total > 10000})
-                raise MCError("不支持的运维操作。")
+                raise MCError(message_text("error_dashboard_003"))
         except (MCError, ValueError, TypeError, KeyError) as exc:
             return error_response(str(exc))
         except Exception:
@@ -199,14 +242,14 @@ class DashboardOperationsMixin:
 
     async def _restore_backup(self, payload: dict) -> dict:
         if payload.get("confirmed") is not True:
-            raise MCError("恢复会覆盖配置和数据库，需要明确确认。")
+            raise MCError(message_text("error_dashboard_002"))
         async with self.guard:
             await self.operations_idle.wait()
             if payload.get("revision") != self.config_revision:
-                raise MCError("配置已变化，请重新预览备份。")
+                raise MCError(message_text("error_dashboard_004"))
             current = self.service
             if current is not None and current.restart_tasks:
-                raise MCError("服务器正在重启，请等待监控结束再恢复。")
+                raise MCError(message_text("error_dashboard_005"))
             manager = self._backup_manager(current)
             config, database = manager.consume(str(payload.get("token", "")))
             settings = Settings(config)
@@ -231,7 +274,7 @@ class DashboardOperationsMixin:
                 self.service = None
                 manager.restore_database(database)
                 self.config.clear()
-                self.config.update(config)
+                self.config.update(settings.raw)
                 await self._persist_config()
                 candidate = self._new_service(settings)
                 with candidate.store.transaction():
@@ -241,7 +284,7 @@ class DashboardOperationsMixin:
                             group.platform, group.group_ids[0], "dashboard:" + request.username, request.username, True
                         )
                         candidate.store.audit(
-                            group, actor, "restore", "", "从插件数据备份恢复；安全备份=" + safety["name"]
+                            group, actor, "restore", "", settings.render("audit_restore", backup=safety["name"])
                         )
                 self._install_service(settings, candidate)
                 await candidate.start()

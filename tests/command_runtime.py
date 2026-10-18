@@ -4,7 +4,6 @@ import ast
 import copy
 import enum
 import inspect
-import logging
 import re
 import types
 import typing
@@ -12,6 +11,8 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
+
+from logger_stub import logger_stub
 
 H = TypeVar("H")
 
@@ -65,7 +66,7 @@ def make_command_runtime(release):
         "HandlerFilter": object,
         "AstrBotConfig": dict,
         "AstrMessageEvent": object,
-        "logger": logging.getLogger("astrbot-command-tests"),
+        "logger": logger_stub("astrbot-command-tests"),
         "star_map": {},
     }
     execute_nodes(

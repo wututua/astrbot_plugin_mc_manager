@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from logger_stub import logger_stub
 from test_core import FakeRcon
 
 from mc_manager.config import Actor, MCError, Settings
@@ -38,7 +39,7 @@ class RebindingTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.offline = set()
         FakeRcon.startup_fail = False
         FakeRcon.disconnected = True
-        self.service = Service(Settings(self.raw), self.root / "data", self.send, FakeRcon)
+        self.service = Service(Settings(self.raw), self.root / "data", self.send, FakeRcon, logger=logger_stub())
 
     async def send(self, origin, text):
         self.sent.append((origin, text))
@@ -58,7 +59,7 @@ class RebindingTests(unittest.IsolatedAsyncioTestCase):
         settings = Settings(raw)
         self.service.store.validate_scopes(settings, actor=self.admin)
         await self.service.close()
-        self.service = Service(settings, self.root / "data", self.send, FakeRcon)
+        self.service = Service(settings, self.root / "data", self.send, FakeRcon, logger=logger_stub())
 
     async def test_delete_group_releases_all_servers_but_archives_entries_and_logs(self):
         await self.add_old()

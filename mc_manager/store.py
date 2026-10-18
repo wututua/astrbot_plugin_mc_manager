@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Actor, Group, MCError, Settings, group_ids
+from .message_catalog import text as message_text
 from .operations_store import OperationsStore
 
 
@@ -153,7 +154,7 @@ class Store(OperationsStore):
                             who,
                             "unbind_group",
                             "",
-                            "移除群绑定；共享服务器保留其他群的绑定，历史白名单和日志保留",
+                            settings.render("audit_unbind_group"),
                         )
             self.db.execute("DELETE FROM bindings")
             for group in settings.groups.values():
@@ -172,7 +173,13 @@ class Store(OperationsStore):
                         (group.id, group.platform, group.group_id),
                     )
                     if actor:
-                        self.audit(group, who, "bind_group", "", "新增群绑定：" + ",".join(group.servers))
+                        self.audit(
+                            group,
+                            who,
+                            "bind_group",
+                            "",
+                            settings.render("audit_bind_group", server_ids=",".join(group.servers)),
+                        )
                 else:
                     self.db.execute(
                         "UPDATE scopes SET platform=?,group_id=?,active=1 WHERE id=?",
@@ -190,13 +197,19 @@ class Store(OperationsStore):
                         for identity, origin in retained.items():
                             if identity in group.group_ids:
                                 self.remember(group.id, origin, identity)
-                        detail = f"群号/平台 {old['platform']}:{old['group_id']} → {group.platform}:{group.group_id}；白名单和编号保留，失效广播会话重置"
+                        detail = settings.render(
+                            "audit_change_group",
+                            old_platform=old["platform"],
+                            old_group=old["group_id"],
+                            platform=group.platform,
+                            group=group.group_id,
+                        )
                         if old["platform"] != group.platform:
                             self.db.execute("UPDATE entries SET owner='' WHERE scope=?", (group.id,))
-                            detail += "；跨平台条目归属清空，由管理员管理"
+                            detail += settings.render("audit_change_platform")
                         self.audit(group, who, "change_group", "", detail)
                     elif not old["active"] and actor:
-                        self.audit(group, who, "bind_group", "", "恢复已归档配置组，保留该组原有白名单")
+                        self.audit(group, who, "bind_group", "", settings.render("audit_restore_group"))
                 eligible = []
                 for sid in group.servers:
                     prior = history.setdefault(sid, group.id)
@@ -212,7 +225,7 @@ class Store(OperationsStore):
                             who,
                             "move_server",
                             sid,
-                            f"配置组 {group.id} 接入共享/曾托管服务器 {sid}，使用本组数据库条目，不自动导入其他组成员",
+                            settings.render("audit_move_server", scope_id=group.id, server_id=sid),
                         )
                 if not eligible:
                     self.db.execute("UPDATE scopes SET initialized=1 WHERE id=?", (group.id,))
@@ -244,7 +257,7 @@ class Store(OperationsStore):
             if (named and named["uuid"] != entry["uuid"]) or (
                 identified and identified["name"].casefold() != entry["name"].casefold()
             ):
-                raise MCError(f"共享服务器 {sid} 的玩家名与 UUID 冲突，请管理员核对各组条目。")
+                raise MCError(message_text("error_store_001", sid=sid))
             if not named:
                 by_name[entry["name"].casefold()] = entry
                 by_uuid[entry["uuid"]] = entry
@@ -261,7 +274,7 @@ class Store(OperationsStore):
                 if (row["name"].casefold() == name.casefold() and row["uuid"] != identifier) or (
                     row["uuid"] == identifier and row["name"].casefold() != name.casefold()
                 ):
-                    raise MCError("该玩家名或 UUID 已在本群或共享服务器中存在冲突，请管理员核对。")
+                    raise MCError(message_text("error_store_002"))
 
     def initialized(self, scope: str) -> bool:
         return bool(self.db.execute("SELECT initialized FROM scopes WHERE id=?", (scope,)).fetchone()[0])
@@ -275,7 +288,7 @@ class Store(OperationsStore):
         else:
             row = self.db.execute("SELECT * FROM entries WHERE scope=? AND name=?", (scope, target)).fetchone()
         if not row:
-            raise MCError("未找到该白名单条目；编号按群固定，删除后不会复用。")
+            raise MCError(message_text("error_entry_missing"))
         return dict(row)
 
     def insert(self, scope: str, name: str, uuid: str, owner: str) -> int:

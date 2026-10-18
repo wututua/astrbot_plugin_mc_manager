@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from logger_stub import logger_stub
+
 from mc_manager.config import Actor, MCError, Settings
 from mc_manager.files import offline_uuid
 from mc_manager.service import Service
@@ -81,7 +83,7 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         FakeRcon.offline = set()
         FakeRcon.disconnected = True
         FakeRcon.startup_fail = False
-        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon)
+        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon, logger=logger_stub())
         self.service.settings.poll_interval = 0.001
         # Hosted Windows timers and file flushes can exceed a few milliseconds.
         self.service.settings.restart_timeout = 1
@@ -252,7 +254,7 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         async def send(*_):
             return True
 
-        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon)
+        self.service = Service(Settings(self.raw), self.root / "data", send, FakeRcon, logger=logger_stub())
         result = await self.execute("list")
         self.assertIn("#2 Alex", result)
 
@@ -377,8 +379,7 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
             await self.execute("list", ["0"])
         with self.assertRaisesRegex(MCError, "超出"):
             await self.execute("list", ["2"])
-        with self.assertRaisesRegex(MCError, "参数"):
-            await self.execute("remove")
+        self.assertIn("还没有自己的白名单", await self.execute("remove"))
 
     async def test_injection_is_rejected(self):
         for name in ["Steve;stop", "Steve\nstop", "@a", "ab", "x" * 17]:

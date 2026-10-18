@@ -3,7 +3,6 @@
 import ast
 import asyncio
 import copy
-import logging
 import os
 import posixpath
 import re
@@ -16,6 +15,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import yaml
+from logger_stub import logger_stub
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
@@ -60,7 +60,7 @@ def official_archive_inspector(allowed_root: Path):
         "zipfile": __import__("zipfile"),
         "yaml": yaml,
         "Path": Path,
-        "logger": logging.getLogger("archive-regression"),
+        "logger": logger_stub("archive-regression"),
         "shutil": types.SimpleNamespace(rmtree=checked_rmtree, move=checked_move),
         "on_error": on_error,
         "ensure_dir": lambda path: Path(path).mkdir(parents=True, exist_ok=True),
@@ -183,7 +183,7 @@ def read_official_changelog(plugin_root: Path):
         node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "get_plugin_changelog"
     )
     module = ast.fix_missing_locations(ast.Module(body=[copy.deepcopy(method)], type_ignores=[]))
-    namespace = {"logger": logging.getLogger(__name__), "PluginServiceError": ValueError}
+    namespace = {"logger": logger_stub(__name__), "PluginServiceError": ValueError}
     exec(compile(module, str(source), "exec"), namespace)
     service = types.SimpleNamespace(resolve_plugin_dir=lambda name: plugin_root)
     return namespace["get_plugin_changelog"](service, "astrbot_plugin_mc_manager")
@@ -245,6 +245,10 @@ class ReleaseTests(unittest.TestCase):
                 ):
                     self.assertIn("astrbot_plugin_mc_manager/" + name, archive.namelist())
                 self.assertFalse(any("sqlite" in name or ".research" in name for name in archive.namelist()))
+                self.assertFalse(any("/tests/" in name or "/tools/" in name for name in archive.namelist()))
+                self.assertFalse(
+                    any("/companion/" in name or name.endswith((".jar", ".java")) for name in archive.namelist())
+                )
                 for filename in ("index.html", "app.js", "settings.js", "operations.js", "style.css"):
                     self.assertEqual(
                         archive.read("astrbot_plugin_mc_manager/pages/console/" + filename),

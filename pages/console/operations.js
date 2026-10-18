@@ -39,7 +39,13 @@ export function createOperations({api, work, notice, confirmAction, group, onRes
     const result = await get('diagnostics');
     const container = $('ops-health'); container.replaceChildren();
     const summary = el('article', undefined, 'ops-card'); summary.append(el('h4', '后台任务与存储'));
-    for (const [name, health] of Object.entries(result.workers || {})) summary.append(el('p', ({sync:'在线探测与同步',notifications:'通知投递',maintenance:'保留策略与告警'}[name] || name) + '：' + ({waiting:'正常等待',running:'运行中',retrying:'异常后重试',paused:'已暂停',starting:'启动中'}[health.state] || health.state) + ' · 最近成功 ' + stamp(health.last_success) + (health.last_error ? ' · 最近错误：' + health.last_error : '')));
+    if (result.bridge?.enabled) {
+      const bridge = result.bridge;
+      summary.append(el('p', `消息互通：队列 ${bridge.pending} · 成功 ${bridge.sent} · 失败 ${bridge.failed} · 丢弃 ${bridge.dropped}`));
+      for (const [sid, status] of Object.entries(bridge.logs || {})) summary.append(el('p', `日志 ${sid}：${status}`));
+      if (bridge.last_error) summary.append(el('p', `最近互通错误：${bridge.last_error}`));
+    }
+    for (const [name, health] of Object.entries(result.workers || {})) summary.append(el('p', ({sync:'在线探测与同步',notifications:'通知投递',maintenance:'保留策略与告警',bridge_events:'游戏事件读取',bridge_delivery:'消息互通投递'}[name] || name) + '：' + ({waiting:'正常等待',running:'运行中',retrying:'异常后重试',paused:'已暂停',starting:'启动中'}[health.state] || health.state) + ' · 最近成功 ' + stamp(health.last_success) + (health.last_error ? ' · 最近错误：' + health.last_error : '')));
     for (const [name, storage] of Object.entries(result.storage || {})) summary.append(el('p', (name === 'plugin_data' ? '插件数据' : '临时目录') + '：' + storage.path + ' · 剩余 ' + humanBytes(storage.free_bytes) + (storage.error ? ' · ' + storage.error : '')));
     summary.append(el('p', '数据库及 WAL 共 ' + humanBytes(Object.values(result.database_bytes || {}).reduce((sum, value) => sum + value, 0)) + ' · 待发送 ' + (result.queue?.pending || 0) + ' · 失败通知 ' + (result.queue?.failed || 0)));
     container.append(summary);
@@ -49,7 +55,7 @@ export function createOperations({api, work, notice, confirmAction, group, onRes
       card.append(el('p', '服务端目录：' + server.directory.path + ' · 可写：' + (server.directory.writable === true ? '是' : '否') + ' · 剩余 ' + humanBytes(server.directory.free_bytes)));
       if (server.directory.error) card.append(el('p', server.directory.error));
       card.append(el('p', server.whitelist.readable ? '白名单可读，共 ' + server.whitelist.entries + ' 条' : server.whitelist.error));
-      if (server.spark) card.append(el('p', 'spark：' + server.spark.status + (server.spark.error ? ' · ' + server.spark.error : '')));
+      if (server.performance) card.append(el('p', '性能：' + server.performance.status + ' · ' + server.performance.format + (server.performance.error ? ' · ' + server.performance.error : '')));
       container.append(card);
     }
   }
@@ -121,7 +127,7 @@ export function createOperations({api, work, notice, confirmAction, group, onRes
     $('ops-backup-upload').value='';
   }));
   $('ops-restore-apply').addEventListener('click', async () => {
-    if (!restore || !await confirmAction('恢复将替换当前插件配置、白名单编号、归属和日志，并放弃配置草稿。当前数据会先自动备份。确认恢复？')) return;
+    if (!restore || !await confirmAction('恢复将替换当前插件配置、白名单编号、归属和日志，并放弃尚未保存的修改。当前数据会先自动备份。确认恢复？')) return;
     await work(async () => {const result=await post({action:'restore_apply',token:restore.token,revision:restore.revision,confirmed:true});restore=null;$('ops-restore-preview').hidden=true;await onRestored();await backups();notice(result.message);});
   });
   $('ops-notification-refresh').addEventListener('click', () => work(notifications));

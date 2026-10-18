@@ -57,49 +57,88 @@
             "default": false,
             "hint": "离线服使用 OfflinePlayer UUID；代理转发 UUID 的网络需确认与实际玩家一致。"
           },
-          "tps_mode": {
-            "description": "TPS 查询方式",
-            "type": "string",
-            "default": "spark",
-            "options": [
-              "spark",
-              "native"
-            ],
-            "hint": "spark：解析 TPS、Tick 和 CPU 指标，支持变量模板；native：执行服务端原生/自定义查询命令，完整返回内容。"
+          "whitelist_overwrite": {
+            "description": "允许直接覆盖白名单文件",
+            "type": "bool",
+            "default": false,
+            "hint": "默认关闭：异常文件拒绝覆盖。开启后：文件损坏、格式或编码异常时，先备份再用插件管理的白名单重建；已有有效白名单的首次导入保持不变。备份失败、目录异常或链接路径仍拒绝覆盖。"
           },
           "tps_command": {
             "description": "TPS 查询指令（可自定义）",
             "type": "string",
             "default": "spark tps",
-            "hint": "spark 模式默认 spark tps，原生模式默认 tps；按实际核心填写单行控制台命令，不带 /。原生模式不使用变量模板。"
+            "hint": "填写服务端实际支持的单行控制台命令，不带 /，例如 spark tps、tps、forge tps、tick query。自动识别返回格式，未知内容保留原文。"
           },
           "players_command": {
             "description": "玩家查询及启动就绪检查命令",
             "type": "string",
             "default": "list"
           },
-          "tps_source": {
-            "description": "spark 数据来源",
-            "type": "string",
-            "default": "auto",
-            "options": [
-              "auto",
-              "rcon",
-              "file"
-            ],
-            "hint": "仅 spark 模式生效。auto 优先有效的本地采集文件，否则使用 RCON；rcon 只用命令回复；file 只读采集器文件。原生模式固定使用 RCON。"
-          },
-          "spark_file": {
-            "description": "本地 spark 指标文件",
-            "type": "string",
-            "default": ".astrbot-spark-tps.txt",
-            "hint": "仅 spark 模式生效。本服目录内的相对路径；使用 Java agent 时每 2 秒更新。原生模式不会读取此文件。"
-          },
           "restart_admin_ids": {
             "type": "list",
             "description": "共享服务器重启负责人（可选）",
             "default": [],
             "hint": "填写 平台实例ID:用户ID。非空时，群重启管理员还需列在此处；全局管理员不受此限制。"
+          },
+          "bridge_log_path": {
+            "description": "消息互通日志路径",
+            "type": "string",
+            "default": "logs/latest.log",
+            "hint": "必须为本服目录内的相对路径。容器需要挂载日志目录；只识别标准英文 Java 服务端日志。"
+          },
+          "bridge_log_encoding": {
+            "description": "消息互通日志编码",
+            "type": "string",
+            "default": "utf-8",
+            "options": [
+              "utf-8",
+              "gb18030"
+            ],
+            "hint": "通常使用 utf-8；部分 Windows 中文服务端使用 gb18030。"
+          },
+          "tps_auto_detect": {
+            "description": "TPS 指令自动探测",
+            "type": "bool",
+            "default": false,
+            "hint": "默认关闭。开启后优先执行配置的命令，无有效回复或命令不受支持时再尝试 tps / forge tps / tick query，并缓存成功命令。目标 Tick 速率不等于实测 TPS。"
+          },
+          "spark_log_fallback": {
+            "description": "spark 新增日志回读",
+            "type": "bool",
+            "default": true,
+            "hint": "命令为 spark tps 且 RCON 无有效回复时，读取本次命令之后新增的控制台报告；其他查询指令不读取 spark 日志。无需 Java 采集器。"
+          },
+          "spark_log_path": {
+            "description": "spark 控制台日志路径",
+            "type": "string",
+            "default": "logs/latest.log",
+            "hint": "本服内相对路径；通常 logs/latest.log。AstrBot 需能读取日志，Docker 需挂载日志目录，不读取旧指标文件。"
+          },
+          "spark_log_encoding": {
+            "description": "spark 日志编码",
+            "type": "string",
+            "default": "utf-8",
+            "options": [
+              "utf-8",
+              "gb18030"
+            ],
+            "hint": "日志正文通常为 utf-8；Windows 旧核心可选 gb18030。以实际日志文件编码为准。"
+          },
+          "spark_log_wait_seconds": {
+            "description": "spark 新增报告等待（秒）",
+            "type": "int",
+            "default": 3,
+            "hint": "1～15 秒，仅无有效 RCON 回复时等待；总体仍受查询总超时限制。"
+          },
+          "tps_output": {
+            "description": "TPS 回复方式",
+            "type": "string",
+            "default": "template",
+            "options": [
+              "template",
+              "raw"
+            ],
+            "hint": "template：将本次各核心真实数据填入可编辑的 messages.tps 模板；raw：完整原文。查询来源与模板独立，缺失值不会补成0或20。"
           }
         }
       }
@@ -171,6 +210,48 @@
             "type": "bool",
             "description": "成员添加和修改需审核",
             "default": false
+          },
+          "bridge_enabled": {
+            "description": "本组消息互通开关",
+            "type": "bool",
+            "default": false,
+            "hint": "需同时打开消息互通总开关；仅转发本组绑定的服务器。"
+          },
+          "bridge_to_game": {
+            "description": "群消息 → 游戏",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_to_group": {
+            "description": "游戏事件 → 群",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_chat": {
+            "description": "转发游戏内聊天",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_join": {
+            "description": "转发进服消息",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_leave": {
+            "description": "转发退服消息",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_death": {
+            "description": "转发死亡消息",
+            "type": "bool",
+            "default": true
+          },
+          "bridge_prefix": {
+            "description": "群消息转发前缀（可留空）",
+            "type": "string",
+            "default": "",
+            "hint": "留空时转发普通文字；例如填写 #mc 时，只转发以 #mc 开头的消息并移除前缀。跳过 /、! 开头的指令和 MC 管理指令。"
           }
         }
       }
@@ -338,178 +419,2414 @@
       "help": {
         "description": "帮助菜单完整文本",
         "type": "text",
-        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）\n{prefix} {mine}：查看自己的条目\n{prefix} {diagnose} [服务器]：诊断（管理员）\n{prefix} {requests}：查看待审核申请\n{prefix} {approve} <申请编号>：通过申请（管理员）\n{prefix} {reject} <申请编号> [原因]：拒绝申请（管理员）\n{prefix} {cancel} <服务器>：取消倒计时（重启管理员）\n{prefix} {backup}：创建插件备份（全局管理员）",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加白名单\n{prefix} {mine}：查看自己的白名单\n{prefix} {remove} [编号或玩家名]：移除自己的白名单\n{prefix} {modify} [编号或原名] <新玩家名>：修改自己的白名单\n{prefix} {players} [服务器]：在线玩家\n{prefix} {tps} [服务器]：服务器性能\n{prefix} {help} all：全部指令",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{add} 对应子指令配置中的第一个别名；{mine} 对应子指令配置中的第一个别名；{remove} 对应子指令配置中的第一个别名；{modify} 对应子指令配置中的第一个别名；{players} 对应子指令配置中的第一个别名；{tps} 对应子指令配置中的第一个别名；{help} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "added": {
         "description": "添加成功回复",
         "type": "text",
         "default": "已添加 #{id} {player}，所属用户：{user}\n{sync}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{player} MC 玩家名；{user} 操作用户 ID；{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "removed": {
         "description": "移除成功回复",
         "type": "text",
         "default": "已移除 #{id} {player}\n{sync}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{player} MC 玩家名；{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "modified": {
         "description": "修改成功回复",
         "type": "text",
         "default": "已修改 #{id} {old_player} → {player}\n{sync}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{old_player} 修改前的玩家名；{player} MC 玩家名；{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "list": {
         "description": "白名单列表回复",
         "type": "text",
         "default": "本群白名单（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{page} 当前页码；{pages} 总页数；{total} 总条数；{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "entry": {
         "description": "单条白名单格式",
         "type": "text",
         "default": "#{id} {player} · 所属：{owner}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{player} MC 玩家名；{owner} 条目所属用户 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "players": {
         "description": "在线玩家回复",
         "type": "text",
         "default": "[{server}] 在线玩家：{result}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{server} 服务器显示名称；{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "tps": {
-        "description": "TPS 查询回复",
+        "description": "TPS 机器人回复模板（各核心通用）",
         "type": "text",
-        "default": "[{server}] spark 性能\nTPS（5秒 / 10秒 / 1分钟 / 5分钟 / 15分钟）：\n{tps_5s} / {tps_10s} / {tps_1m} / {tps_5m} / {tps_15m}\nTick 耗时（毫秒，最小 / 中位数 / P95 / 最大）：\n最近10秒：{mspt_10s_min} / {mspt_10s_med} / {mspt_10s_p95} / {mspt_10s_max}\n最近1分钟：{mspt_1m_min} / {mspt_1m_med} / {mspt_1m_p95} / {mspt_1m_max}\nCPU（单位%，10秒 / 1分钟 / 15分钟）：\n系统：{cpu_system_10s} / {cpu_system_1m} / {cpu_system_15m}\nMC进程：{cpu_process_10s} / {cpu_process_1m} / {cpu_process_15m}{tps_warning}",
-        "hint": "spark 自定义回复。支持 19 个指标占位符，例如 {tps_5s}、{mspt_10s_p95}、{cpu_process_1m}，完整变量表在管理面板和 docs/TPS_VARIABLES.md。CPU 数字不含 %；Tick 耗时单位为 ms。"
+        "default": "📈 服务器性能 [{server}]\n\n{perf_tps_line}\n{perf_tick_lines}\n{perf_cpu_lines}\n{perf_entities_line}\n{perf_memory_line}{perf_notice}\n\nℹ️ 来源：{query_source} | 格式：{perf_format} | 指令：{query_command}\n耗时：{query_latency_ms} ms | 缓存：{query_cached}",
+        "hint": "本模板变量：{server} 服务器显示名称；{perf_tps_line} 性能/查询变量，详见 TPS 变量文档；{perf_tick_lines} 性能/查询变量，详见 TPS 变量文档；{perf_cpu_lines} 性能/查询变量，详见 TPS 变量文档；{perf_entities_line} 性能/查询变量，详见 TPS 变量文档；{perf_memory_line} 性能/查询变量，详见 TPS 变量文档；{perf_notice} 性能/查询变量，详见 TPS 变量文档；{query_source} 性能/查询变量，详见 TPS 变量文档；{perf_format} 性能/查询变量，详见 TPS 变量文档；{query_command} 性能/查询变量，详见 TPS 变量文档；{query_latency_ms} 性能/查询变量，详见 TPS 变量文档；{query_cached} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "status": {
         "description": "状态查询回复",
         "type": "text",
         "default": "[{server}] {result}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{server} 服务器显示名称；{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "servers": {
         "description": "服务器列表回复",
         "type": "text",
         "default": "本群服务器：\n{entries}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "error": {
         "description": "操作失败回复",
         "type": "text",
         "default": "MC 操作失败：{error}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "logs": {
         "description": "审计日志回复",
         "type": "text",
         "default": "本群操作日志（第 {page}/{pages} 页，共 {total} 条）\n{entries}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{page} 当前页码；{pages} 总页数；{total} 总条数；{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "log_entry": {
         "description": "单条日志格式",
         "type": "text",
         "default": "{time} | {action} | 群 {group} | 用户 {user} | {player} | {detail}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{time} 操作或申请时间；{action} 日志操作类型；{group} 群号 / 群 ID；{user} 操作用户 ID；{player} MC 玩家名；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "sync": {
         "description": "同步操作回复",
         "type": "text",
         "default": "{sync}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "import": {
         "description": "导入操作回复",
         "type": "text",
         "default": "已导入 {count} 条未托管条目（无归属，限管理员管理）。\n{sync}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{count} 条目数量；{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "restart_started": {
         "description": "开始重启回复",
         "type": "text",
         "default": "正在重启 {servers}，将向本群广播结果。",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{servers} 目标服务器名称列表 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "restart_success": {
         "description": "重启成功群广播",
         "type": "text",
         "default": "✅ {server} 重启成功，耗时 {seconds} 秒。{detail}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{server} 服务器显示名称；{seconds} 耗时、等待或倒计时秒数；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "restart_failed": {
         "description": "重启失败群广播",
         "type": "text",
         "default": "❌ {server} 重启失败：{error}",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{server} 服务器显示名称；{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "game_restart_success": {
         "description": "重启成功游戏内广播",
         "type": "text",
         "default": "服务器 {server} 已重启成功。",
-        "hint": "支持文档中的 {占位符}；文字中的花括号请写为 {{ 或 }}。"
+        "hint": "本模板变量：{server} 服务器显示名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "tps_warning": {
         "description": "spark 部分指标缺失提示",
         "type": "text",
         "default": "\n部分 spark 数据不可用：{tps_missing_fields}\n原始输出：\n{tps_raw}",
-        "hint": "完整解析时 {tps_warning} 为空；部分缺失时按本模板生成，支持 {tps_missing_fields} 和 {tps_raw}。可留空。"
+        "hint": "本模板变量：{tps_missing_fields} 性能/查询变量，详见 TPS 变量文档；{tps_raw} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "tps_error": {
         "description": "spark 查询失败或未能解析时的回复",
         "type": "text",
-        "default": "[{server}] spark TPS 查询失败或无法解析：\n{tps_raw}",
-        "hint": "没有解析出任何指标时使用。支持 {server}、{server_id}、{tps_raw}、{result} 等变量。"
+        "default": "[{server}] TPS 查询失败或无法解析：\n原始输出：\n{tps_raw}",
+        "hint": "本模板变量：{server} 服务器显示名称；{tps_raw} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "restart_countdown": {
         "type": "text",
         "description": "重启倒计时通知",
-        "default": "⏳ {server} 将在 {seconds} 秒后重启，请及时保存进度。"
+        "default": "⏳ {server} 将在 {seconds} 秒后重启，请及时保存进度。",
+        "hint": "本模板变量：{server} 服务器显示名称；{seconds} 耗时、等待或倒计时秒数 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "restart_cancelled": {
         "type": "text",
         "description": "重启取消通知",
-        "default": "已取消 {server} 的重启倒计时。"
+        "default": "已取消 {server} 的重启倒计时。",
+        "hint": "本模板变量：{server} 服务器显示名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "request_created": {
         "type": "text",
         "description": "申请提交回复",
-        "default": "白名单申请 #{id} 已提交：{player}，等待管理员审核。"
+        "default": "白名单申请 #{id} 已提交：{player}，等待管理员审核。",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{player} MC 玩家名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "request_approved": {
         "type": "text",
         "description": "审核通过回复",
-        "default": "已通过申请 #{id}：{player}\n{sync}"
+        "default": "已通过申请 #{id}：{player}\n{sync}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{player} MC 玩家名；{sync} 按同步行模板生成的结果 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "request_rejected": {
         "type": "text",
         "description": "审核拒绝回复",
-        "default": "已拒绝申请 #{id}：{detail}"
+        "default": "已拒绝申请 #{id}：{detail}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "alert": {
         "type": "text",
         "description": "异常告警模板",
-        "default": "⚠️ [{server}] {alert_type}：{alert_detail}"
+        "default": "⚠️ [{server}] {alert_type}：{alert_detail}",
+        "hint": "本模板变量：{server} 服务器显示名称；{alert_type} 告警类型；{alert_detail} 告警明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "alert_recovery": {
         "type": "text",
         "description": "恢复通知模板",
-        "default": "✅ [{server}] {alert_type} 已恢复：{alert_detail}"
+        "default": "✅ [{server}] {alert_type} 已恢复：{alert_detail}",
+        "hint": "本模板变量：{server} 服务器显示名称；{alert_type} 告警类型；{alert_detail} 告警明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "diagnostics": {
         "type": "text",
         "description": "诊断结果回复",
-        "default": "MC 诊断\n{result}"
+        "default": "MC 诊断\n{result}",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "requests": {
         "type": "text",
         "description": "申请列表回复",
-        "default": "待审核申请\n{entries}"
+        "default": "待审核申请\n{entries}",
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       },
       "backup_created": {
         "type": "text",
         "description": "备份创建回复",
-        "default": "已创建插件数据备份：{result}\n请在管理网页下载，备份包含配置凭据。"
+        "default": "已创建插件数据备份：{result}\n请在管理网页下载，备份包含配置凭据。",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "bridge_to_game": {
+        "description": "群 → 游戏消息模板（支持 § 染色码）",
+        "type": "text",
+        "default": "§b[群 {group}] §f{nickname}§7: §r{message}",
+        "hint": "本模板变量：{group} 群号 / 群 ID；{nickname} 群昵称；{message} 聊天/事件原文 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "bridge_chat": {
+        "description": "游戏聊天 → 群模板",
+        "type": "text",
+        "default": "[{server}] <{player}> {message}",
+        "hint": "本模板变量：{server} 服务器显示名称；{player} MC 玩家名；{message} 聊天/事件原文 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "bridge_join": {
+        "description": "进服 → 群模板",
+        "type": "text",
+        "default": "[{server}] {player} 加入了游戏",
+        "hint": "本模板变量：{server} 服务器显示名称；{player} MC 玩家名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "bridge_leave": {
+        "description": "退服 → 群模板",
+        "type": "text",
+        "default": "[{server}] {player} 离开了游戏",
+        "hint": "本模板变量：{server} 服务器显示名称；{player} MC 玩家名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "bridge_death": {
+        "description": "死亡 → 群模板",
+        "type": "text",
+        "default": "[{server}] {message}",
+        "hint": "本模板变量：{server} 服务器显示名称；{message} 聊天/事件原文 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_001": {
+        "description": "权限与操作错误 · 配置待修正：{config_error} 请打开管理面板修正后保存。",
+        "type": "text",
+        "default": "配置待修正：{config_error} 请打开管理面板修正后保存。",
+        "hint": "本模板变量：{config_error} 配置问题详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_002": {
+        "description": "权限与操作错误 · 插件尚未初始化或已卸载。",
+        "type": "text",
+        "default": "插件尚未初始化或已卸载。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_003": {
+        "description": "权限与操作错误 · 请先登录 AstrBot 管理后台。",
+        "type": "text",
+        "default": "请先登录 AstrBot 管理后台。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_004": {
+        "description": "权限与操作错误 · 请选择一个已配置的群。",
+        "type": "text",
+        "default": "请选择一个已配置的群。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_005": {
+        "description": "权限与操作错误 · 配置保存被更新的配置覆盖，请重新载入后再试。",
+        "type": "text",
+        "default": "配置保存被更新的配置覆盖，请重新载入后再试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_006": {
+        "description": "权限与操作错误 · 请求必须是 JSON 对象。",
+        "type": "text",
+        "default": "请求必须是 JSON 对象。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_007": {
+        "description": "权限与操作错误 · 不支持该操作。",
+        "type": "text",
+        "default": "不支持该操作。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_008": {
+        "description": "权限与操作错误 · 参数格式无效。",
+        "type": "text",
+        "default": "参数格式无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_009": {
+        "description": "权限与操作错误 · 请求需要 config 对象。",
+        "type": "text",
+        "default": "请求需要 config 对象。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_010": {
+        "description": "权限与操作错误 · 配置已被其他页面修改，请先重新载入配置后再保存。",
+        "type": "text",
+        "default": "配置已被其他页面修改，请先重新载入配置后再保存。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_011": {
+        "description": "权限与操作错误 · 有服务器正在重启，等待重启监控结束后再保存配置。",
+        "type": "text",
+        "default": "有服务器正在重启，等待重启监控结束后再保存配置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_012": {
+        "description": "权限与操作错误 · 新服务器需要填写密码或密码环境变量。",
+        "type": "text",
+        "default": "新服务器需要填写密码或密码环境变量。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_main_013": {
+        "description": "权限与操作错误 · 配置变更未完成，原配置回滚写盘也失败。{detail} 当前实例仍使用原配置，但磁盘配置可能不同",
+        "type": "text",
+        "default": "配置变更未完成，原配置回滚写盘也失败。{detail} 当前实例仍使用原配置，但磁盘配置可能不同；修复存储问题后请重新保存并核对配置。",
+        "hint": "本模板变量：{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_001": {
+        "description": "配置与文件错误 · 备份数据库完整性检查未通过。",
+        "type": "text",
+        "default": "备份数据库完整性检查未通过。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_002": {
+        "description": "配置与文件错误 · 备份数据库包含不支持的对象。",
+        "type": "text",
+        "default": "备份数据库包含不支持的对象。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_003": {
+        "description": "配置与文件错误 · 备份中的后续编号无效。",
+        "type": "text",
+        "default": "备份中的后续编号无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_004": {
+        "description": "配置与文件错误 · 备份目录不能是链接。",
+        "type": "text",
+        "default": "备份目录不能是链接。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_005": {
+        "description": "配置与文件错误 · 备份文件名无效。",
+        "type": "text",
+        "default": "备份文件名无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_006": {
+        "description": "配置与文件错误 · 备份文件路径无效。",
+        "type": "text",
+        "default": "备份文件路径无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_007": {
+        "description": "配置与文件错误 · 备份不存在或超过大小限制。",
+        "type": "text",
+        "default": "备份不存在或超过大小限制。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_008": {
+        "description": "配置与文件错误 · 备份压缩包不能超过 32 MB。",
+        "type": "text",
+        "default": "备份压缩包不能超过 32 MB。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_009": {
+        "description": "配置与文件错误 · 待确认恢复过多，请稍后再试。",
+        "type": "text",
+        "default": "待确认恢复过多，请稍后再试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_010": {
+        "description": "配置与文件错误 · 恢复预览已失效，请重新预览。",
+        "type": "text",
+        "default": "恢复预览已失效，请重新预览。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_011": {
+        "description": "配置与文件错误 · 备份数据库结构不受支持：{table}",
+        "type": "text",
+        "default": "备份数据库结构不受支持：{table}",
+        "hint": "本模板变量：{table} 备份数据库表名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_012": {
+        "description": "配置与文件错误 · 备份中的固定编号、归属或配置组数据无效。",
+        "type": "text",
+        "default": "备份中的固定编号、归属或配置组数据无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_013": {
+        "description": "配置与文件错误 · 备份中存在重复白名单条目。",
+        "type": "text",
+        "default": "备份中存在重复白名单条目。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_014": {
+        "description": "配置与文件错误 · 插件数据库超过备份大小限制，请先导出并清理旧日志。",
+        "type": "text",
+        "default": "插件数据库超过备份大小限制，请先导出并清理旧日志。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_015": {
+        "description": "配置与文件错误 · 配置超过 1 MB。",
+        "type": "text",
+        "default": "配置超过 1 MB。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_016": {
+        "description": "配置与文件错误 · 压缩备份超过 32 MB，请先清理日志。",
+        "type": "text",
+        "default": "压缩备份超过 32 MB，请先清理日志。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_017": {
+        "description": "配置与文件错误 · 备份格式、数据库或校验信息无效。",
+        "type": "text",
+        "default": "备份格式、数据库或校验信息无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_018": {
+        "description": "配置与文件错误 · 上传的备份超过大小限制。",
+        "type": "text",
+        "default": "上传的备份超过大小限制。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_019": {
+        "description": "配置与文件错误 · 恢复预览已过期。",
+        "type": "text",
+        "default": "恢复预览已过期。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_020": {
+        "description": "配置与文件错误 · 预览后的备份发生变化。",
+        "type": "text",
+        "default": "预览后的备份发生变化。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_021": {
+        "description": "配置与文件错误 · 备份仅允许 database.sqlite3、config.json、backup.json 三",
+        "type": "text",
+        "default": "备份仅允许 database.sqlite3、config.json、backup.json 三个文件。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_022": {
+        "description": "配置与文件错误 · 备份解压大小超过限制。",
+        "type": "text",
+        "default": "备份解压大小超过限制。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_023": {
+        "description": "配置与文件错误 · 这不是受支持的 MC 管理插件数据备份。",
+        "type": "text",
+        "default": "这不是受支持的 MC 管理插件数据备份。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_024": {
+        "description": "配置与文件错误 · 备份校验值不一致。",
+        "type": "text",
+        "default": "备份校验值不一致。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_backups_025": {
+        "description": "配置与文件错误 · 备份上传编码无效。",
+        "type": "text",
+        "default": "备份上传编码无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_bridge_001": {
+        "description": "权限与操作错误 · 消息日志路径超出本服目录。",
+        "type": "text",
+        "default": "消息日志路径超出本服目录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_bridge_002": {
+        "description": "权限与操作错误 · 消息日志路径必须指向普通文件。",
+        "type": "text",
+        "default": "消息日志路径必须指向普通文件。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_bridge_003": {
+        "description": "权限与操作错误 · 群消息发送失败。",
+        "type": "text",
+        "default": "群消息发送失败。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_001": {
+        "description": "配置与文件错误 · {label} 必须使用 JSON 布尔值 true 或 false。",
+        "type": "text",
+        "default": "{label} 必须使用 JSON 布尔值 true 或 false。",
+        "hint": "本模板变量：{label} 当前校验/统计项目名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_002": {
+        "description": "配置与文件错误 · Java 版玩家名必须为 3～16 位字母、数字或下划线。",
+        "type": "text",
+        "default": "Java 版玩家名必须为 3～16 位字母、数字或下划线。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_003": {
+        "description": "配置与文件错误 · 群号必须是文本、数字或群号列表，多个群用逗号或换行分隔。",
+        "type": "text",
+        "default": "群号必须是文本、数字或群号列表，多个群用逗号或换行分隔。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_group_unbound": {
+        "description": "权限与操作错误 · 本群未绑定 MC 服务器，请联系管理员配置。",
+        "type": "text",
+        "default": "本群未绑定 MC 服务器，请联系管理员配置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_004": {
+        "description": "配置与文件错误 · {label} 必须是 {minimum}～{maximum} 之间的整数。",
+        "type": "text",
+        "default": "{label} 必须是 {minimum}～{maximum} 之间的整数。",
+        "hint": "本模板变量：{label} 当前校验/统计项目名称；{minimum} 最小允许值；{maximum} 最大允许值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_005": {
+        "description": "配置与文件错误 · 服务器 ID 必须是文本或 ID 列表，多个 ID 用逗号或换行分隔。",
+        "type": "text",
+        "default": "服务器 ID 必须是文本或 ID 列表，多个 ID 用逗号或换行分隔。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_006": {
+        "description": "配置与文件错误 · 群号列表只能包含文本或数字。",
+        "type": "text",
+        "default": "群号列表只能包含文本或数字。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_007": {
+        "description": "配置与文件错误 · 配置必须为 JSON 对象。",
+        "type": "text",
+        "default": "配置必须为 JSON 对象。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_008": {
+        "description": "配置与文件错误 · TPS 缺失值文字必须为 1～32 字符的单行文本。",
+        "type": "text",
+        "default": "TPS 缺失值文字必须为 1～32 字符的单行文本。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_009": {
+        "description": "配置与文件错误 · 至少配置一个主指令。",
+        "type": "text",
+        "default": "至少配置一个主指令。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_group_only": {
+        "description": "权限与操作错误 · MC 功能仅允许在绑定的群聊中使用。",
+        "type": "text",
+        "default": "MC 功能仅允许在绑定的群聊中使用。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_unknown_command": {
+        "description": "权限与操作错误 · 未知子指令，请发送主指令查看帮助。",
+        "type": "text",
+        "default": "未知子指令，请发送主指令查看帮助。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_010": {
+        "description": "配置与文件错误 · 服务器 ID 格式无效；请填写服务器唯一 ID，多个 ID 用逗号或换行分隔。",
+        "type": "text",
+        "default": "服务器 ID 格式无效；请填写服务器唯一 ID，多个 ID 用逗号或换行分隔。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_011": {
+        "description": "配置与文件错误 · 单个群号不能包含空白或控制字符。",
+        "type": "text",
+        "default": "单个群号不能包含空白或控制字符。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_012": {
+        "description": "配置与文件错误 · {value1} 必须是 JSON 对象数组。",
+        "type": "text",
+        "default": "{value1} 必须是 JSON 对象数组。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_013": {
+        "description": "配置与文件错误 · {value1} 必须为 JSON 对象。",
+        "type": "text",
+        "default": "{value1} 必须为 JSON 对象。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_014": {
+        "description": "配置与文件错误 · 主指令不能包含 / 或空白。",
+        "type": "text",
+        "default": "主指令不能包含 / 或空白。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_015": {
+        "description": "配置与文件错误 · 指令 {action} 至少需要一个别名。",
+        "type": "text",
+        "default": "指令 {action} 至少需要一个别名。",
+        "hint": "本模板变量：{action} 日志操作类型 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_016": {
+        "description": "配置与文件错误 · 消息模板 {value1} 必须为不超过 16000 字符的文本。",
+        "type": "text",
+        "default": "消息模板 {value1} 必须为不超过 16000 字符的文本。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_017": {
+        "description": "配置与文件错误 · 服务器 ID 必须唯一，且只含字母、数字、下划线或横线。",
+        "type": "text",
+        "default": "服务器 ID 必须唯一，且只含字母、数字、下划线或横线。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_018": {
+        "description": "配置与文件错误 · 请先设置 server_root（服务器共同父目录）。",
+        "type": "text",
+        "default": "请先设置 server_root（服务器共同父目录）。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_019": {
+        "description": "配置与文件错误 · 服务器 {sid} 的目录必须在 server_root 内，且不能重复。",
+        "type": "text",
+        "default": "服务器 {sid} 的目录必须在 server_root 内，且不能重复。",
+        "hint": "本模板变量：{sid} 涉及的服务器 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_020": {
+        "description": "配置与文件错误 · 不同服务器不能使用相同的 RCON 地址和端口。",
+        "type": "text",
+        "default": "不同服务器不能使用相同的 RCON 地址和端口。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_022": {
+        "description": "配置与文件错误 · 服务器 {sid} 的 TPS 输出格式必须为 template 或 raw。",
+        "type": "text",
+        "default": "服务器 {sid} 的 TPS 输出格式必须为 template 或 raw。",
+        "hint": "本模板变量：{sid} 涉及的服务器 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_023": {
+        "description": "配置与文件错误 · 服务器 {sid} 的 RCON 地址或查询命令无效。",
+        "type": "text",
+        "default": "服务器 {sid} 的 RCON 地址或查询命令无效。",
+        "hint": "本模板变量：{sid} 涉及的服务器 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_024": {
+        "description": "配置与文件错误 · 服务器重启负责人应使用 平台实例ID:用户ID 格式。",
+        "type": "text",
+        "default": "服务器重启负责人应使用 平台实例ID:用户ID 格式。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_025": {
+        "description": "配置与文件错误 · 消息互通日志必须是本服目录内的相对文件路径。",
+        "type": "text",
+        "default": "消息互通日志必须是本服目录内的相对文件路径。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_026": {
+        "description": "配置与文件错误 · 消息互通日志编码必须为 utf-8 或 gb18030。",
+        "type": "text",
+        "default": "消息互通日志编码必须为 utf-8 或 gb18030。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_027": {
+        "description": "配置与文件错误 · spark 日志必须是本服目录内的相对文件路径。",
+        "type": "text",
+        "default": "spark 日志必须是本服目录内的相对文件路径。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_028": {
+        "description": "配置与文件错误 · spark 日志编码必须为 utf-8 或 gb18030。",
+        "type": "text",
+        "default": "spark 日志编码必须为 utf-8 或 gb18030。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_029": {
+        "description": "配置与文件错误 · 第 {group_index} 条群绑定缺少：{value2}。请编辑该群绑定，或删除未使用的空",
+        "type": "text",
+        "default": "第 {group_index} 条群绑定缺少：{value2}。请编辑该群绑定，或删除未使用的空白项。",
+        "hint": "本模板变量：{group_index} 当前上下文中的数据；{value2} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_030": {
+        "description": "配置与文件错误 · 第 {group_index} 条群绑定的配置 ID 格式无效，只能使用 1～64 位字母、数字",
+        "type": "text",
+        "default": "第 {group_index} 条群绑定的配置 ID 格式无效，只能使用 1～64 位字母、数字、下划线或横线。",
+        "hint": "本模板变量：{group_index} 当前上下文中的数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_031": {
+        "description": "配置与文件错误 · 第 {group_index} 条群绑定的配置 ID {gid} 重复，请使用不同 ID 或删除",
+        "type": "text",
+        "default": "第 {group_index} 条群绑定的配置 ID {gid} 重复，请使用不同 ID 或删除重复项。",
+        "hint": "本模板变量：{group_index} 当前上下文中的数据；{gid} 当前上下文中的数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_032": {
+        "description": "配置与文件错误 · 同一平台下的群不能重复绑定到多条配置；可在同一配置填写多个群号。",
+        "type": "text",
+        "default": "同一平台下的群不能重复绑定到多条配置；可在同一配置填写多个群号。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_033": {
+        "description": "配置与文件错误 · 群 {gid} 的服务器集合为空或重复。",
+        "type": "text",
+        "default": "群 {gid} 的服务器集合为空或重复。",
+        "hint": "本模板变量：{gid} 当前上下文中的数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_034": {
+        "description": "配置与文件错误 · 群 {gid} 的服务器必须使用相同 UUID 模式。",
+        "type": "text",
+        "default": "群 {gid} 的服务器必须使用相同 UUID 模式。",
+        "hint": "本模板变量：{gid} 当前上下文中的数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_035": {
+        "description": "配置与文件错误 · 群消息转发前缀必须为不超过 32 字符且不含空白的文本，可留空。",
+        "type": "text",
+        "default": "群消息转发前缀必须为不超过 32 字符且不含空白的文本，可留空。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_036": {
+        "description": "配置与文件错误 · 子指令别名重复或包含空白：{value}",
+        "type": "text",
+        "default": "子指令别名重复或包含空白：{value}",
+        "hint": "本模板变量：{value} 本次校验的值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_037": {
+        "description": "配置与文件错误 · 消息模板 {value1} 使用了无效的占位符或花括号。",
+        "type": "text",
+        "default": "消息模板 {value1} 使用了无效的占位符或花括号。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_config_038": {
+        "description": "配置与文件错误 · 群 {gid} 绑定的服务器 ID {sid} 不存在；请先添加该服务器，或编辑群聊重新勾选服务",
+        "type": "text",
+        "default": "群 {gid} 绑定的服务器 ID {sid} 不存在；请先添加该服务器，或编辑群聊重新勾选服务器。",
+        "hint": "本模板变量：{gid} 当前上下文中的数据；{sid} 涉及的服务器 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_001": {
+        "description": "配置与文件错误 · 导出格式应为 json 或 csv。",
+        "type": "text",
+        "default": "导出格式应为 json 或 csv。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_002": {
+        "description": "配置与文件错误 · 恢复会覆盖配置和数据库，需要明确确认。",
+        "type": "text",
+        "default": "恢复会覆盖配置和数据库，需要明确确认。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_003": {
+        "description": "配置与文件错误 · 不支持的运维操作。",
+        "type": "text",
+        "default": "不支持的运维操作。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_004": {
+        "description": "配置与文件错误 · 配置已变化，请重新预览备份。",
+        "type": "text",
+        "default": "配置已变化，请重新预览备份。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_005": {
+        "description": "配置与文件错误 · 服务器正在重启，请等待监控结束再恢复。",
+        "type": "text",
+        "default": "服务器正在重启，请等待监控结束再恢复。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_006": {
+        "description": "配置与文件错误 · 操作请求必须是 JSON 对象。",
+        "type": "text",
+        "default": "操作请求必须是 JSON 对象。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_007": {
+        "description": "配置与文件错误 · 请先修正配置，或从已有备份恢复。",
+        "type": "text",
+        "default": "请先修正配置，或从已有备份恢复。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_dashboard_008": {
+        "description": "配置与文件错误 · 批量修改需要明确确认。",
+        "type": "text",
+        "default": "批量修改需要明确确认。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_001": {
+        "description": "配置与文件错误 · 服务器目录在配置后变为链接，已拒绝访问。",
+        "type": "text",
+        "default": "服务器目录在配置后变为链接，已拒绝访问。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_002": {
+        "description": "配置与文件错误 · 服务器目录不存在：{id}",
+        "type": "text",
+        "default": "服务器目录不存在：{id}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_003": {
+        "description": "配置与文件错误 · whitelist.json 不能是指向其他位置的链接。",
+        "type": "text",
+        "default": "whitelist.json 不能是指向其他位置的链接。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_004": {
+        "description": "配置与文件错误 · 该正版玩家不存在。",
+        "type": "text",
+        "default": "该正版玩家不存在。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_005": {
+        "description": "配置与文件错误 · 正版 UUID 查询返回了不同的玩家名。",
+        "type": "text",
+        "default": "正版 UUID 查询返回了不同的玩家名。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_006": {
+        "description": "配置与文件错误 · 正版 UUID 查询失败（HTTP {code}），请稍后重试。",
+        "type": "text",
+        "default": "正版 UUID 查询失败（HTTP {code}），请稍后重试。",
+        "hint": "本模板变量：{code} HTTP 状态码 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_007": {
+        "description": "配置与文件错误 · 正版 UUID 查询失败，请检查联网后重试。",
+        "type": "text",
+        "default": "正版 UUID 查询失败，请检查联网后重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_008": {
+        "description": "配置与文件错误 · 白名单文件超过 8 MB。",
+        "type": "text",
+        "default": "白名单文件超过 8 MB。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_009": {
+        "description": "配置与文件错误 · 服务器 {id} 的白名单损坏或无法读取，已拒绝覆盖。",
+        "type": "text",
+        "default": "服务器 {id} 的白名单损坏或无法读取，已拒绝覆盖。",
+        "hint": "本模板变量：{id} 白名单或申请固定编号 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_010": {
+        "description": "配置与文件错误 · 白名单存在重复玩家名或 UUID，请先人工检查。",
+        "type": "text",
+        "default": "白名单存在重复玩家名或 UUID，请先人工检查。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_files_011": {
+        "description": "配置与文件错误 · 白名单备份失败，已拒绝覆盖：{exc}",
+        "type": "text",
+        "default": "白名单备份失败，已拒绝覆盖：{exc}",
+        "hint": "本模板变量：{exc} 底层异常详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_001": {
+        "description": "权限与操作错误 · 清理预览已失效，请重新预览。",
+        "type": "text",
+        "default": "清理预览已失效，请重新预览。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_unloading": {
+        "description": "权限与操作错误 · 插件正在卸载。",
+        "type": "text",
+        "default": "插件正在卸载。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_002": {
+        "description": "权限与操作错误 · 无法确认发送者身份。",
+        "type": "text",
+        "default": "无法确认发送者身份。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_003": {
+        "description": "权限与操作错误 · 指令参数数量不正确，请查看帮助。",
+        "type": "text",
+        "default": "指令参数数量不正确，请查看帮助。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_004": {
+        "description": "权限与操作错误 · 导入文本不能超过 1 MB。",
+        "type": "text",
+        "default": "导入文本不能超过 1 MB。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_005": {
+        "description": "权限与操作错误 · 每次导入应包含 1～500 条玩家记录。",
+        "type": "text",
+        "default": "每次导入应包含 1～500 条玩家记录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_006": {
+        "description": "权限与操作错误 · 待确认导入过多，请稍后重试。",
+        "type": "text",
+        "default": "待确认导入过多，请稍后重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_007": {
+        "description": "权限与操作错误 · 导入预览已失效，请重新预览。",
+        "type": "text",
+        "default": "导入预览已失效，请重新预览。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_008": {
+        "description": "权限与操作错误 · 请先修正预览中的错误。",
+        "type": "text",
+        "default": "请先修正预览中的错误。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_009": {
+        "description": "权限与操作错误 · 请选择 1～500 条记录。",
+        "type": "text",
+        "default": "请选择 1～500 条记录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_010": {
+        "description": "权限与操作错误 · 批量操作或归属无效。",
+        "type": "text",
+        "default": "批量操作或归属无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_011": {
+        "description": "权限与操作错误 · 查询过于频繁，请等待 {value1} 秒。",
+        "type": "text",
+        "default": "查询过于频繁，请等待 {value1} 秒。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_012": {
+        "description": "权限与操作错误 · 插件完整备份仅允许已核实的 AstrBot 全局管理员或后台管理员创建。",
+        "type": "text",
+        "default": "插件完整备份仅允许已核实的 AstrBot 全局管理员或后台管理员创建。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_013": {
+        "description": "权限与操作错误 · 未找到本配置组待审核的申请。",
+        "type": "text",
+        "default": "未找到本配置组待审核的申请。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_014": {
+        "description": "权限与操作错误 · 无法解析导入内容。",
+        "type": "text",
+        "default": "无法解析导入内容。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_015": {
+        "description": "权限与操作错误 · 白名单已变化，请重新预览后导入。",
+        "type": "text",
+        "default": "白名单已变化，请重新预览后导入。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_016": {
+        "description": "权限与操作错误 · 没有此服务器的重启管理权限。",
+        "type": "text",
+        "default": "没有此服务器的重启管理权限。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_017": {
+        "description": "权限与操作错误 · 只能取消尚未发送 stop 的重启倒计时。",
+        "type": "text",
+        "default": "只能取消尚未发送 stop 的重启倒计时。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_018": {
+        "description": "权限与操作错误 · 导入格式应为 json、csv 或 text。",
+        "type": "text",
+        "default": "导入格式应为 json、csv 或 text。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_019": {
+        "description": "权限与操作错误 · 归属用户 ID 无效。",
+        "type": "text",
+        "default": "归属用户 ID 无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_020": {
+        "description": "权限与操作错误 · 导入内容存在重复玩家。",
+        "type": "text",
+        "default": "导入内容存在重复玩家。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_021": {
+        "description": "权限与操作错误 · 导入 UUID 与当前身份模式不一致。",
+        "type": "text",
+        "default": "导入 UUID 与当前身份模式不一致。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_022": {
+        "description": "权限与操作错误 · 申请人的白名单数量已达到上限。",
+        "type": "text",
+        "default": "申请人的白名单数量已达到上限。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_023": {
+        "description": "权限与操作错误 · 原条目或归属已变化，请拒绝旧申请并重新提交。",
+        "type": "text",
+        "default": "原条目或归属已变化，请拒绝旧申请并重新提交。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_024": {
+        "description": "权限与操作错误 · 已有同名条目使用不同 UUID。",
+        "type": "text",
+        "default": "已有同名条目使用不同 UUID。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_025": {
+        "description": "权限与操作错误 · 该玩家已存在，无法重复通过。",
+        "type": "text",
+        "default": "该玩家已存在，无法重复通过。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_026": {
+        "description": "权限与操作错误 · 新的玩家名或 UUID 已存在。",
+        "type": "text",
+        "default": "新的玩家名或 UUID 已存在。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_store_001": {
+        "description": "权限与操作错误 · 未找到当前配置组的通知。",
+        "type": "text",
+        "default": "未找到当前配置组的通知。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_store_002": {
+        "description": "权限与操作错误 · 你已有待审核的申请，请等待管理员处理。",
+        "type": "text",
+        "default": "你已有待审核的申请，请等待管理员处理。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_operations_store_003": {
+        "description": "权限与操作错误 · 日期格式应为 ISO 8601，例如 2026-10-16T00:00:00+08:00。",
+        "type": "text",
+        "default": "日期格式应为 ISO 8601，例如 2026-10-16T00:00:00+08:00。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_001": {
+        "description": "权限与操作错误 · RCON 命令包含无效字符。",
+        "type": "text",
+        "default": "RCON 命令包含无效字符。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_002": {
+        "description": "权限与操作错误 · RCON 命令过长。",
+        "type": "text",
+        "default": "RCON 命令过长。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_003": {
+        "description": "权限与操作错误 · RCON 返回了无效包长度。",
+        "type": "text",
+        "default": "RCON 返回了无效包长度。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_004": {
+        "description": "权限与操作错误 · RCON 返回包缺少结束符。",
+        "type": "text",
+        "default": "RCON 返回包缺少结束符。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_005": {
+        "description": "权限与操作错误 · RCON 认证响应无效。",
+        "type": "text",
+        "default": "RCON 认证响应无效。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_006": {
+        "description": "权限与操作错误 · 未配置 RCON 密码，或密码环境变量为空。",
+        "type": "text",
+        "default": "未配置 RCON 密码，或密码环境变量为空。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_007": {
+        "description": "权限与操作错误 · RCON 响应编号或类型不匹配。",
+        "type": "text",
+        "default": "RCON 响应编号或类型不匹配。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_008": {
+        "description": "权限与操作错误 · RCON 响应超过 1 MB。",
+        "type": "text",
+        "default": "RCON 响应超过 1 MB。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_rcon_009": {
+        "description": "权限与操作错误 · RCON 认证失败，请检查密码。",
+        "type": "text",
+        "default": "RCON 认证失败，请检查密码。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_admin_required": {
+        "description": "权限与操作错误 · 该功能仅允许 AstrBot 管理员或本群配置的管理员使用。",
+        "type": "text",
+        "default": "该功能仅允许 AstrBot 管理员或本群配置的管理员使用。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_server_target": {
+        "description": "权限与操作错误 · 服务器不存在、名称不唯一或不属于本群，请使用服务器 ID。",
+        "type": "text",
+        "default": "服务器不存在、名称不唯一或不属于本群，请使用服务器 ID。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_entry_owner": {
+        "description": "权限与操作错误 · 只能修改或移除自己的白名单；历史导入条目需管理员处理。",
+        "type": "text",
+        "default": "只能修改或移除自己的白名单；历史导入条目需管理员处理。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_001": {
+        "description": "权限与操作错误 · 页码超出范围，目前共 {pages} 页。",
+        "type": "text",
+        "default": "页码超出范围，目前共 {pages} 页。",
+        "hint": "本模板变量：{pages} 总页数 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_002": {
+        "description": "权限与操作错误 · 无法确认发送者身份，请使用可识别账号的群聊消息重试。",
+        "type": "text",
+        "default": "无法确认发送者身份，请使用可识别账号的群聊消息重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_command_arguments": {
+        "description": "权限与操作错误 · 指令参数数量不正确，请发送主指令查看帮助。",
+        "type": "text",
+        "default": "指令参数数量不正确，请发送主指令查看帮助。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_003": {
+        "description": "权限与操作错误 · 启动就绪查询没有有效响应，请检查 players_command 配置。",
+        "type": "text",
+        "default": "启动就绪查询没有有效响应，请检查 players_command 配置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_004": {
+        "description": "权限与操作错误 · 没有目标服务器的重启权限，请核对本组管理员及服务器负责人设置。",
+        "type": "text",
+        "default": "没有目标服务器的重启权限，请核对本组管理员及服务器负责人设置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_restart_busy": {
+        "description": "权限与操作错误 · 目标服务器已有重启任务，请等待当前任务结束。",
+        "type": "text",
+        "default": "目标服务器已有重启任务，请等待当前任务结束。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_005": {
+        "description": "权限与操作错误 · 尚无本群广播会话；请先在群内使用 MC 指令，或配置 broadcast_origin。",
+        "type": "text",
+        "default": "尚无本群广播会话；请先在群内使用 MC 指令，或配置 broadcast_origin。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_006": {
+        "description": "权限与操作错误 · 等待服务器启动超时：{last_error}",
+        "type": "text",
+        "default": "等待服务器启动超时：{last_error}",
+        "hint": "本模板变量：{last_error} 最近一次启动检查错误 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_007": {
+        "description": "权限与操作错误 · 玩家 {value1} 在各服使用不同 UUID，导入已停止。",
+        "type": "text",
+        "default": "玩家 {value1} 在各服使用不同 UUID，导入已停止。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_008": {
+        "description": "权限与操作错误 · 同一 UUID 对应多个玩家名，导入已停止。",
+        "type": "text",
+        "default": "同一 UUID 对应多个玩家名，导入已停止。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_009": {
+        "description": "权限与操作错误 · 每人最多添加 {max_entries} 条，请先修改或移除已有条目。",
+        "type": "text",
+        "default": "每人最多添加 {max_entries} 条，请先修改或移除已有条目。",
+        "hint": "本模板变量：{max_entries} 每人白名单数量上限 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_010": {
+        "description": "权限与操作错误 · 该玩家名或 UUID 已在本群白名单中。",
+        "type": "text",
+        "default": "该玩家名或 UUID 已在本群白名单中。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_011": {
+        "description": "权限与操作错误 · 白名单重载失败：{response}",
+        "type": "text",
+        "default": "白名单重载失败：{response}",
+        "hint": "本模板变量：{response} 服务端原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_service_012": {
+        "description": "权限与操作错误 · 条目归属已变化或权限不足，请重新查看白名单。",
+        "type": "text",
+        "default": "条目归属已变化或权限不足，请重新查看白名单。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_001": {
+        "description": "配置与文件错误 · spark 日志目录在配置后变为链接，请检查服务端目录。",
+        "type": "text",
+        "default": "spark 日志目录在配置后变为链接，请检查服务端目录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_002": {
+        "description": "配置与文件错误 · spark 日志路径超出本服目录或指向链接。",
+        "type": "text",
+        "default": "spark 日志路径超出本服目录或指向链接。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_003": {
+        "description": "配置与文件错误 · spark 日志尚未记录查询起点。",
+        "type": "text",
+        "default": "spark 日志尚未记录查询起点。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_004": {
+        "description": "配置与文件错误 · spark 日志报告过长，已拒绝解析。",
+        "type": "text",
+        "default": "spark 日志报告过长，已拒绝解析。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_005": {
+        "description": "配置与文件错误 · spark 日志路径必须指向普通文件。",
+        "type": "text",
+        "default": "spark 日志路径必须指向普通文件。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_006": {
+        "description": "配置与文件错误 · 未找到本服日志 {relative}，请确认路径和日志目录挂载。",
+        "type": "text",
+        "default": "未找到本服日志 {relative}，请确认路径和日志目录挂载。",
+        "hint": "本模板变量：{relative} 日志相对路径 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_007": {
+        "description": "配置与文件错误 · 查询期间 spark 日志已轮转或截断，请重试；不会读取替换文件的历史报告。",
+        "type": "text",
+        "default": "查询期间 spark 日志已轮转或截断，请重试；不会读取替换文件的历史报告。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_008": {
+        "description": "配置与文件错误 · 查询期间 spark 日志内容已重写，请重试。",
+        "type": "text",
+        "default": "查询期间 spark 日志内容已重写，请重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_009": {
+        "description": "配置与文件错误 · 本次 spark 查询期间新增日志超过 256 KB，已停止读取，请稍后重试。",
+        "type": "text",
+        "default": "本次 spark 查询期间新增日志超过 256 KB，已停止读取，请稍后重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_010": {
+        "description": "配置与文件错误 · 本次等待窗口出现多份 spark 报告，无法可靠归属，请避免同时手动查询后重试。",
+        "type": "text",
+        "default": "本次等待窗口出现多份 spark 报告，无法可靠归属，请避免同时手动查询后重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_spark_log_011": {
+        "description": "配置与文件错误 · RCON 已返回，但 {value1} 秒内未发现本次 spark 的新增日志报告。请确认日志路",
+        "type": "text",
+        "default": "RCON 已返回，但 {value1} 秒内未发现本次 spark 的新增日志报告。请确认日志路径、编码或增加等待时间。",
+        "hint": "本模板变量：{value1} 当前模板中对应位置的动态数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_entry_missing": {
+        "description": "权限与操作错误 · 未找到该白名单条目；编号按群固定，删除后不会复用。",
+        "type": "text",
+        "default": "未找到该白名单条目；编号按群固定，删除后不会复用。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_store_001": {
+        "description": "权限与操作错误 · 共享服务器 {sid} 的玩家名与 UUID 冲突，请管理员核对各组条目。",
+        "type": "text",
+        "default": "共享服务器 {sid} 的玩家名与 UUID 冲突，请管理员核对各组条目。",
+        "hint": "本模板变量：{sid} 涉及的服务器 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_store_002": {
+        "description": "权限与操作错误 · 该玩家名或 UUID 已在本群或共享服务器中存在冲突，请管理员核对。",
+        "type": "text",
+        "default": "该玩家名或 UUID 已在本群或共享服务器中存在冲突，请管理员核对。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "internal_error": {
+        "description": "权限与操作错误 · 内部错误，请管理员检查 AstrBot 日志和同步状态。",
+        "type": "text",
+        "default": "内部错误，请管理员检查 AstrBot 日志和同步状态。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_unknown": {
+        "description": "权限与操作错误 · {error}",
+        "type": "text",
+        "default": "{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "empty_logs": {
+        "description": "常用回复 · 暂无日志",
+        "type": "text",
+        "default": "暂无日志",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "empty_mine": {
+        "description": "常用回复 · 暂无自己的条目",
+        "type": "text",
+        "default": "暂无自己的条目",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "empty_requests": {
+        "description": "申请审核 · 暂无待审核申请",
+        "type": "text",
+        "default": "暂无待审核申请",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "owner_imported": {
+        "description": "通用文字 · 历史导入",
+        "type": "text",
+        "default": "历史导入",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "default_rejection": {
+        "description": "申请审核 · 管理员拒绝",
+        "type": "text",
+        "default": "管理员拒绝",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "no_error": {
+        "description": "通用文字 · 无",
+        "type": "text",
+        "default": "无",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "yes": {
+        "description": "通用文字 · 是",
+        "type": "text",
+        "default": "是",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "no": {
+        "description": "通用文字 · 否",
+        "type": "text",
+        "default": "否",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "unverified": {
+        "description": "通用文字 · 未验证",
+        "type": "text",
+        "default": "未验证",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "players_none": {
+        "description": "状态与查询 · 无",
+        "type": "text",
+        "default": "无",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "source_unavailable": {
+        "description": "状态与查询 · 未取得数据",
+        "type": "text",
+        "default": "未取得数据",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "source_log": {
+        "description": "状态与查询 · 服务端新增日志",
+        "type": "text",
+        "default": "服务端新增日志",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "status_online": {
+        "description": "状态与查询 · 在线（RCON 查询成功）",
+        "type": "text",
+        "default": "在线（RCON 查询成功）",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "status_offline": {
+        "description": "状态与查询 · 离线或 RCON 不可用",
+        "type": "text",
+        "default": "离线或 RCON 不可用",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "status_invalid": {
+        "description": "状态与查询 · RCON 可达，查询指令异常",
+        "type": "text",
+        "default": "RCON 可达，查询指令异常",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "status_unknown": {
+        "description": "状态与查询 · 查询失败，状态未确认",
+        "type": "text",
+        "default": "查询失败，状态未确认",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "status_restarting": {
+        "description": "状态与查询 · 重启监控中",
+        "type": "text",
+        "default": "重启监控中",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_timeout": {
+        "description": "状态与查询 · 查询超时（含排队，超过 {seconds} 秒），请稍后重试或调整查询总超时。",
+        "type": "text",
+        "default": "查询超时（含排队，超过 {seconds} 秒），请稍后重试或调整查询总超时。",
+        "hint": "本模板变量：{seconds} 耗时、等待或倒计时秒数 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_empty": {
+        "description": "状态与查询 · 服务端返回空响应",
+        "type": "text",
+        "default": "服务端返回空响应",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_spark_empty": {
+        "description": "状态与查询 · 服务端返回空响应；spark 报告可能只输出到控制台。请开启 spark 新增日志回读并确认日志",
+        "type": "text",
+        "default": "服务端返回空响应；spark 报告可能只输出到控制台。请开启 spark 新增日志回读并确认日志路径，或改用核心支持的原生 TPS 命令。{detail}",
+        "hint": "本模板变量：{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_unsupported": {
+        "description": "状态与查询 · 服务端不支持查询命令，或命令权限/参数无效",
+        "type": "text",
+        "default": "服务端不支持查询命令，或命令权限/参数无效",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_unsupported_result": {
+        "description": "状态与查询 · {error}：{result}",
+        "type": "text",
+        "default": "{error}：{result}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成；{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_offline": {
+        "description": "状态与查询 · 离线或 RCON 不可用：{error}",
+        "type": "text",
+        "default": "离线或 RCON 不可用：{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_native_failure": {
+        "description": "状态与查询 · 未找到可用的原生 TPS 查询指令 {entries}",
+        "type": "text",
+        "default": "未找到可用的 TPS 查询指令\n{entries}",
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_command_failure": {
+        "description": "状态与查询 · {query_command}：{error}",
+        "type": "text",
+        "default": "{query_command}：{error}",
+        "hint": "本模板变量：{query_command} 性能/查询变量，详见 TPS 变量文档；{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_empty_short": {
+        "description": "状态与查询 · 空响应",
+        "type": "text",
+        "default": "空响应",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_unparsed": {
+        "description": "状态与查询 · TPS 回复格式未识别，保留原文",
+        "type": "text",
+        "default": "TPS 回复格式未识别，保留原文",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_players_unparsed": {
+        "description": "状态与查询 · 在线人数未能解析，可使用 players_raw 查看原始回复",
+        "type": "text",
+        "default": "在线人数未能解析，可使用 players_raw 查看原始回复",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_log_warning": {
+        "description": "状态与查询 · spark 日志回读：{error}",
+        "type": "text",
+        "default": "spark 日志回读：{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "server_entry": {
+        "description": "常用回复 · {server_id} · {server}",
+        "type": "text",
+        "default": "{server_id} · {server}",
+        "hint": "本模板变量：{server_id} 服务器配置 ID；{server} 服务器显示名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_restarting": {
+        "description": "常用回复 · {server}：重启中，待同步",
+        "type": "text",
+        "default": "{server}：重启中，待同步",
+        "hint": "本模板变量：{server} 服务器显示名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_success": {
+        "description": "常用回复 · {server}：已同步",
+        "type": "text",
+        "default": "{server}：已同步",
+        "hint": "本模板变量：{server} 服务器显示名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_pending": {
+        "description": "常用回复 · {server}：待同步（{error}；{detail}）",
+        "type": "text",
+        "default": "{server}：待同步（{error}；{detail}）",
+        "hint": "本模板变量：{server} 服务器显示名称；{error} 失败原因，可由对应错误模板生成；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_disk_ready": {
+        "description": "常用回复 · 白名单文件已就绪，重载成功或服务端下次启动后生效",
+        "type": "text",
+        "default": "白名单文件已就绪，重载成功或服务端下次启动后生效",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_disk_failed": {
+        "description": "常用回复 · 白名单文件未更新，修复后可重试同步",
+        "type": "text",
+        "default": "白名单文件未更新，修复后可重试同步",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_interrupted": {
+        "description": "重启与广播 · 插件监控曾中断，无法确认重启结果；请查询服务器状态。",
+        "type": "text",
+        "default": "插件监控曾中断，无法确认重启结果；请查询服务器状态。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_pending_sync": {
+        "description": "重启与广播 ·  白名单待同步：{error}",
+        "type": "text",
+        "default": " 白名单待同步：{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_game_failed": {
+        "description": "重启与广播 ·  游戏内广播失败：{error}",
+        "type": "text",
+        "default": " 游戏内广播失败：{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_timeout": {
+        "description": "重启与广播 · 重启超时：旧连接未断开或新服务器未就绪。",
+        "type": "text",
+        "default": "重启超时：旧连接未断开或新服务器未就绪。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "game_restart_countdown": {
+        "description": "重启与广播 · {result}",
+        "type": "text",
+        "default": "{result}",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "diagnostic_server": {
+        "description": "日志与诊断 · {server}（{server_id}）：{status}；目录可写={writable}；白",
+        "type": "text",
+        "default": "{server}（{server_id}）：{status}；目录可写={writable}；白名单可读={readable}",
+        "hint": "本模板变量：{server} 服务器显示名称；{server_id} 服务器配置 ID；{status} 性能/查询变量，详见 TPS 变量文档；{writable} 目录写入检查结果（可修改 boolean_*）；{readable} 白名单读取检查结果（可修改 boolean_*） 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "diagnostic_worker": {
+        "description": "日志与诊断 · 后台 {worker}：{worker_state}；最近错误={error}",
+        "type": "text",
+        "default": "后台 {worker}：{worker_state}；最近错误={error}",
+        "hint": "本模板变量：{worker} 后台任务名称；{worker_state} 后台任务状态（可修改 worker_state_*）；{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "request_entry": {
+        "description": "申请审核 · #{id} · {request_kind} · {player} · {user} · {ti",
+        "type": "text",
+        "default": "#{id} · {request_kind} · {player} · {user} · {time}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{request_kind} 申请类型（可修改 request_kind_*）；{player} MC 玩家名；{user} 操作用户 ID；{time} 操作或申请时间 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_type_rcon": {
+        "description": "常用回复 · RCON 不可用",
+        "type": "text",
+        "default": "RCON 不可用",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_type_disk": {
+        "description": "常用回复 · 磁盘空间不足",
+        "type": "text",
+        "default": "磁盘空间不足",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_type_tps": {
+        "description": "常用回复 · TPS 过低",
+        "type": "text",
+        "default": "TPS 过低",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_disk_detail": {
+        "description": "常用回复 · 插件数据、临时目录或服务端所在盘剩余 {free_mb} MB",
+        "type": "text",
+        "default": "插件数据、临时目录或服务端所在盘剩余 {free_mb} MB",
+        "hint": "本模板变量：{free_mb} 剩余磁盘空间，MB 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_tps_detail": {
+        "description": "常用回复 · 最近 1 分钟 TPS={perf_tps}",
+        "type": "text",
+        "default": "最近 1 分钟 TPS={perf_tps}",
+        "hint": "本模板变量：{perf_tps} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_status_online": {
+        "description": "常用回复 · 在线",
+        "type": "text",
+        "default": "在线",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_status_offline": {
+        "description": "常用回复 · 离线或 RCON 不可用",
+        "type": "text",
+        "default": "离线或 RCON 不可用",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "log_detail": {
+        "description": "日志与诊断 · {detail}",
+        "type": "text",
+        "default": "{detail}",
+        "hint": "本模板变量：{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "parse_complete": {
+        "description": "TPS 摘要与标签 · 已解析",
+        "type": "text",
+        "default": "已解析",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "parse_partial": {
+        "description": "TPS 摘要与标签 · 部分",
+        "type": "text",
+        "default": "部分",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "parse_failed": {
+        "description": "TPS 摘要与标签 · 未解析",
+        "type": "text",
+        "default": "未解析",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tps_windows_line": {
+        "description": "TPS 摘要与标签 · ⚡ TPS（{windows}）：{values}",
+        "type": "text",
+        "default": "⚡ TPS（{windows}）：{values}",
+        "hint": "本模板变量：{windows} 本次实际提供的统计窗口；{values} 与窗口/标签对应的数值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tps_overall_line": {
+        "description": "TPS 摘要与标签 · ⚡ TPS（总体/实测）：{perf_tps}",
+        "type": "text",
+        "default": "⚡ TPS（总体/实测）：{perf_tps}",
+        "hint": "本模板变量：{perf_tps} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tps_dimensions_line": {
+        "description": "TPS 摘要与标签 · ⚡ TPS：按维度提供，未报告总体 TPS",
+        "type": "text",
+        "default": "⚡ TPS：按维度提供，未报告总体 TPS",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tps_target_line": {
+        "description": "TPS 摘要与标签 · ⚡ 实测 TPS：未提供；目标/配置速率：{perf_target_rate} tick/s；状",
+        "type": "text",
+        "default": "⚡ 实测 TPS：未提供；目标/配置速率：{perf_target_rate} tick/s；状态：{perf_tick_state}",
+        "hint": "本模板变量：{perf_target_rate} 性能/查询变量，详见 TPS 变量文档；{perf_tick_state} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tps_unparsed_line": {
+        "description": "TPS 摘要与标签 · ⚡ TPS：未解析（保留原始回复）",
+        "type": "text",
+        "default": "⚡ TPS：未解析（保留原始回复）",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_dimension_entry": {
+        "description": "TPS 摘要与标签 · {dimension}：TPS {perf_tps} · Tick {perf_mspt} ms",
+        "type": "text",
+        "default": "{dimension}：TPS {perf_tps} · Tick {perf_mspt} ms",
+        "hint": "本模板变量：{dimension} 核心返回的维度名称；{perf_tps} 性能/查询变量，详见 TPS 变量文档；{perf_mspt} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_dimensions_line": {
+        "description": "TPS 摘要与标签 · 🌍 维度与总体： {entries}",
+        "type": "text",
+        "default": "🌍 维度与总体：\n{entries}",
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tick_empty": {
+        "description": "TPS 摘要与标签 · ⏱ Tick：本次回复未提供",
+        "type": "text",
+        "default": "⏱ Tick：本次回复未提供",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_cpu_empty": {
+        "description": "TPS 摘要与标签 · 🖥 CPU：本次回复未提供",
+        "type": "text",
+        "default": "🖥 CPU：本次回复未提供",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_memory_line": {
+        "description": "TPS 摘要与标签 · 💾 内存：{perf_memory}",
+        "type": "text",
+        "default": "💾 内存：{perf_memory}",
+        "hint": "本模板变量：{perf_memory} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_entities_line": {
+        "description": "TPS 摘要与标签 · 🧍 实体：{perf_entities}",
+        "type": "text",
+        "default": "🧍 实体：{perf_entities}",
+        "hint": "本模板变量：{perf_entities} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_missing": {
+        "description": "TPS 摘要与标签 · 本次回复未提供",
+        "type": "text",
+        "default": "本次回复未提供",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tick_spark_line": {
+        "description": "TPS 摘要与标签 · ⏱ Tick {window}（{labels}）：{values} ms",
+        "type": "text",
+        "default": "⏱ Tick {window}（{labels}）：{values} ms",
+        "hint": "本模板变量：{window} 统计窗口；{labels} 统计标签；{values} 与窗口/标签对应的数值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_cpu_spark_line": {
+        "description": "TPS 摘要与标签 · 🖥 CPU（{scope}，{windows}）：{values} %",
+        "type": "text",
+        "default": "🖥 CPU（{scope}，{windows}）：{values} %",
+        "hint": "本模板变量：{scope} CPU 指标范围；{windows} 本次实际提供的统计窗口；{values} 与窗口/标签对应的数值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tick_average_line": {
+        "description": "TPS 摘要与标签 · ⏱ Tick 平均耗时：{mspt_avg} ms",
+        "type": "text",
+        "default": "⏱ Tick 平均耗时：{mspt_avg} ms",
+        "hint": "本模板变量：{mspt_avg} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tick_percentile_line": {
+        "description": "TPS 摘要与标签 · ⏱ Tick 百分位：{entries}",
+        "type": "text",
+        "default": "⏱ Tick 百分位：{entries}",
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_tick_custom_line": {
+        "description": "TPS 摘要与标签 · ⏱ Tick 耗时（原始标注）：{perf_mspt} ms",
+        "type": "text",
+        "default": "⏱ Tick 耗时（原始标注）：{perf_mspt} ms",
+        "hint": "本模板变量：{perf_mspt} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_cpu_custom_line": {
+        "description": "TPS 摘要与标签 · 🖥 CPU（原始标注）：{cpu_usage} %",
+        "type": "text",
+        "default": "🖥 CPU（原始标注）：{cpu_usage} %",
+        "hint": "本模板变量：{cpu_usage} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_entities_summary": {
+        "description": "TPS 摘要与标签 · {entities_ticking} ticking / {entities_non_ticki",
+        "type": "text",
+        "default": "{entities_ticking} ticking / {entities_non_ticking} non-ticking",
+        "hint": "本模板变量：{entities_ticking} 性能/查询变量，详见 TPS 变量文档；{entities_non_ticking} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_memory_summary": {
+        "description": "TPS 摘要与标签 · {memory_used} {memory_used_unit} / {memory_total",
+        "type": "text",
+        "default": "{memory_used} {memory_used_unit} / {memory_total} {memory_total_unit}{detail}",
+        "hint": "本模板变量：{memory_used} 性能/查询变量，详见 TPS 变量文档；{memory_used_unit} 性能/查询变量，详见 TPS 变量文档；{memory_total} 性能/查询变量，详见 TPS 变量文档；{memory_total_unit} 性能/查询变量，详见 TPS 变量文档；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice_star": {
+        "description": "TPS 摘要与标签 · 已保留服务端的 * 标记；不将其解释为零值或缺失。",
+        "type": "text",
+        "default": "已保留服务端的 * 标记；不将其解释为零值或缺失。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice_multiple": {
+        "description": "TPS 摘要与标签 · 返回内容包含多份 TPS 报告，未跨报告合并数值。",
+        "type": "text",
+        "default": "返回内容包含多份 TPS 报告，未跨报告合并数值。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice_target": {
+        "description": "TPS 摘要与标签 · 目标/配置 Tick 速率不等于实测 TPS，未将其填入 TPS 变量。",
+        "type": "text",
+        "default": "目标/配置 Tick 速率不等于实测 TPS，未将其填入 TPS 变量。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice_partial": {
+        "description": "TPS 摘要与标签 · 部分指标未能解析，已保留原始回复。",
+        "type": "text",
+        "default": "部分指标未能解析，已保留原始回复。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice_query": {
+        "description": "TPS 摘要与标签 · 查询说明：{error}",
+        "type": "text",
+        "default": "查询说明：{error}",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_notice": {
+        "description": "TPS 摘要与标签 ·  说明：{entries}",
+        "type": "text",
+        "default": "\n说明：{entries}",
+        "hint": "本模板变量：{entries} 按行模板生成的明细 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_min": {
+        "description": "TPS 摘要与标签 · 最小",
+        "type": "text",
+        "default": "最小",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_median": {
+        "description": "TPS 摘要与标签 · 中位",
+        "type": "text",
+        "default": "中位",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_max": {
+        "description": "TPS 摘要与标签 · 最大",
+        "type": "text",
+        "default": "最大",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_system": {
+        "description": "TPS 摘要与标签 · 系统",
+        "type": "text",
+        "default": "系统",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_process": {
+        "description": "TPS 摘要与标签 · MC进程",
+        "type": "text",
+        "default": "MC进程",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_1s": {
+        "description": "TPS 摘要与标签 · 1秒",
+        "type": "text",
+        "default": "1s",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_5s": {
+        "description": "TPS 摘要与标签 · 5秒",
+        "type": "text",
+        "default": "5秒",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_10s": {
+        "description": "TPS 摘要与标签 · 10秒",
+        "type": "text",
+        "default": "10秒",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_30s": {
+        "description": "TPS 摘要与标签 · 30秒",
+        "type": "text",
+        "default": "30s",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_1m": {
+        "description": "TPS 摘要与标签 · 1分钟",
+        "type": "text",
+        "default": "1分钟",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_5m": {
+        "description": "TPS 摘要与标签 · 5分钟",
+        "type": "text",
+        "default": "5分钟",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_window_15m": {
+        "description": "TPS 摘要与标签 · 15分钟",
+        "type": "text",
+        "default": "15分钟",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_state_frozen": {
+        "description": "TPS 摘要与标签 · 冻结",
+        "type": "text",
+        "default": "冻结",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_state_sprinting": {
+        "description": "TPS 摘要与标签 · 加速",
+        "type": "text",
+        "default": "加速",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_state_overloaded": {
+        "description": "TPS 摘要与标签 · 过载",
+        "type": "text",
+        "default": "过载",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_state_normal": {
+        "description": "TPS 摘要与标签 · 正常",
+        "type": "text",
+        "default": "正常",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_unknown": {
+        "description": "TPS 摘要与标签 · 未识别",
+        "type": "text",
+        "default": "未识别",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_custom": {
+        "description": "TPS 摘要与标签 · 自定义",
+        "type": "text",
+        "default": "自定义",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "raw_tps": {
+        "description": "状态与查询 · {result}",
+        "type": "text",
+        "default": "{result}",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "raw_tps_append": {
+        "description": "状态与查询 · {result}  原始输出： {tps_raw}",
+        "type": "text",
+        "default": "{result}\n\n原始输出：\n{tps_raw}",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复；{tps_raw} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "query_log_acquired": {
+        "description": "状态与查询 · spark 报告通过本次命令之后新增的控制台日志取得，无需 Java 采集器。",
+        "type": "text",
+        "default": "spark 报告通过本次命令之后新增的控制台日志取得，无需 Java 采集器。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_type_other": {
+        "description": "常用回复 · {alert_type}",
+        "type": "text",
+        "default": "{alert_type}",
+        "hint": "本模板变量：{alert_type} 告警类型 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "parse_full": {
+        "description": "TPS 摘要与标签 · 完整",
+        "type": "text",
+        "default": "完整",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "empty_whitelist": {
+        "description": "常用回复 · 暂无白名单",
+        "type": "text",
+        "default": "暂无白名单",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "owner_imported_managed": {
+        "description": "通用文字 · 历史导入（管理员管理）",
+        "type": "text",
+        "default": "历史导入（管理员管理）",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_initial_import_1": {
+        "description": "日志与诊断 · 保留合并 {value1} 条原有白名单",
+        "type": "text",
+        "default": "保留合并 {count} 条原有白名单",
+        "hint": "本模板变量：{count} 条目数量 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_restart_requested_1": {
+        "description": "日志与诊断 · 发送 stop，等待启动脚本重启",
+        "type": "text",
+        "default": "发送 stop，等待启动脚本重启",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_import_1": {
+        "description": "日志与诊断 · 合并导入 {count} 条",
+        "type": "text",
+        "default": "合并导入 {count} 条",
+        "hint": "本模板变量：{count} 条目数量 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_add_1": {
+        "description": "日志与诊断 · #{index}; UUID={identifier}; 同步到 {value3}",
+        "type": "text",
+        "default": "#{id}; UUID={uuid}; 同步到 {server_ids}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{uuid} 玩家 UUID；{server_ids} 目标服务器 ID 列表 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_remove_1": {
+        "description": "日志与诊断 · #{value1}; 原归属={value2}",
+        "type": "text",
+        "default": "#{id}; 原归属={owner}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{owner} 条目所属用户 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_remove_2": {
+        "description": "日志与诊断 · 修改 #{value1}，原归属={value2}",
+        "type": "text",
+        "default": "修改 #{id}，原归属={owner}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{owner} 条目所属用户 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_add_2": {
+        "description": "日志与诊断 · 修改 #{value1}，归属={value2}",
+        "type": "text",
+        "default": "修改 #{id}，归属={owner}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{owner} 条目所属用户 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_event_1": {
+        "description": "日志与诊断 · 申请 #{request_id}",
+        "type": "text",
+        "default": "申请 #{id}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_event_2": {
+        "description": "日志与诊断 · 申请 #{request_id}；申请人={value2}；{value3}",
+        "type": "text",
+        "default": "申请 #{id}；申请人={owner}；{detail}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{owner} 条目所属用户；{detail} 附加说明或操作详情 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_restart_cancelled_1": {
+        "description": "日志与诊断 · 发送 stop 前取消",
+        "type": "text",
+        "default": "发送 stop 前取消",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_event_3": {
+        "description": "日志与诊断 · #{value1}；原归属={value2}；新归属={value3}",
+        "type": "text",
+        "default": "#{id}；原归属={old_owner}；新归属={new_owner}",
+        "hint": "本模板变量：{id} 白名单或申请固定编号；{old_owner} 原所属用户 ID；{new_owner} 新所属用户 ID 或移除标记 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "boolean_true": {
+        "description": "通用文字 · True",
+        "type": "text",
+        "default": "True",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "boolean_false": {
+        "description": "通用文字 · False",
+        "type": "text",
+        "default": "False",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "boolean_unknown": {
+        "description": "通用文字 · None",
+        "type": "text",
+        "default": "None",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "worker_state_starting": {
+        "description": "日志与诊断 · starting",
+        "type": "text",
+        "default": "starting",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "worker_state_running": {
+        "description": "日志与诊断 · running",
+        "type": "text",
+        "default": "running",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "worker_state_waiting": {
+        "description": "日志与诊断 · waiting",
+        "type": "text",
+        "default": "waiting",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "worker_state_paused": {
+        "description": "日志与诊断 · paused",
+        "type": "text",
+        "default": "paused",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "worker_state_retrying": {
+        "description": "日志与诊断 · retrying",
+        "type": "text",
+        "default": "retrying",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_initial_import": {
+        "description": "日志与诊断 · initial_import",
+        "type": "text",
+        "default": "initial_import",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_add": {
+        "description": "日志与诊断 · add",
+        "type": "text",
+        "default": "add",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_remove": {
+        "description": "日志与诊断 · remove",
+        "type": "text",
+        "default": "remove",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_import": {
+        "description": "日志与诊断 · import",
+        "type": "text",
+        "default": "import",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_sync": {
+        "description": "日志与诊断 · sync",
+        "type": "text",
+        "default": "sync",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_restart_requested": {
+        "description": "日志与诊断 · restart_requested",
+        "type": "text",
+        "default": "restart_requested",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_restart_cancelled": {
+        "description": "日志与诊断 · restart_cancelled",
+        "type": "text",
+        "default": "restart_cancelled",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_restart_success": {
+        "description": "日志与诊断 · restart_success",
+        "type": "text",
+        "default": "restart_success",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_restart_failed": {
+        "description": "日志与诊断 · restart_failed",
+        "type": "text",
+        "default": "restart_failed",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_backup": {
+        "description": "日志与诊断 · backup",
+        "type": "text",
+        "default": "backup",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_request_add": {
+        "description": "日志与诊断 · request_add",
+        "type": "text",
+        "default": "request_add",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_request_modify": {
+        "description": "日志与诊断 · request_modify",
+        "type": "text",
+        "default": "request_modify",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_request_approved": {
+        "description": "日志与诊断 · request_approved",
+        "type": "text",
+        "default": "request_approved",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_request_rejected": {
+        "description": "日志与诊断 · request_rejected",
+        "type": "text",
+        "default": "request_rejected",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "request_kind_add": {
+        "description": "申请审核 · add",
+        "type": "text",
+        "default": "add",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "request_kind_modify": {
+        "description": "申请审核 · modify",
+        "type": "text",
+        "default": "modify",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_waiting": {
+        "description": "重启与广播 · 旧连接已断开，新服务器尚未就绪。",
+        "type": "text",
+        "default": "旧连接已断开，新服务器尚未就绪。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "owner_removed": {
+        "description": "通用文字 · 已移除",
+        "type": "text",
+        "default": "已移除",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_cancelled_detail": {
+        "description": "重启与广播 · 管理员在发送 stop 前取消倒计时",
+        "type": "text",
+        "default": "管理员在发送 stop 前取消倒计时",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "restart_ready_detail": {
+        "description": "重启与广播 · 新 RCON 连续两次可执行查询",
+        "type": "text",
+        "default": "新 RCON 连续两次可执行查询",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_unbind_group": {
+        "description": "日志与诊断 · 移除群绑定；共享服务器保留其他群的绑定，历史白名单和日志保留",
+        "type": "text",
+        "default": "移除群绑定；共享服务器保留其他群的绑定，历史白名单和日志保留",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_bind_group": {
+        "description": "日志与诊断 · 新增群绑定：{server_ids}",
+        "type": "text",
+        "default": "新增群绑定：{server_ids}",
+        "hint": "本模板变量：{server_ids} 目标服务器 ID 列表 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_restore_group": {
+        "description": "日志与诊断 · 恢复已归档配置组，保留该组原有白名单",
+        "type": "text",
+        "default": "恢复已归档配置组，保留该组原有白名单",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_change_group": {
+        "description": "日志与诊断 · 群号/平台 {old_platform}:{old_group} → {platform}:{g",
+        "type": "text",
+        "default": "群号/平台 {old_platform}:{old_group} → {platform}:{group}；白名单和编号保留，失效广播会话重置",
+        "hint": "本模板变量：{old_platform} 原平台实例 ID；{old_group} 原群号；{platform} 当前平台实例 ID；{group} 群号 / 群 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_change_platform": {
+        "description": "日志与诊断 · ；跨平台条目归属清空，由管理员管理",
+        "type": "text",
+        "default": "；跨平台条目归属清空，由管理员管理",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_move_server": {
+        "description": "日志与诊断 · 配置组 {scope_id} 接入共享/曾托管服务器 {server_id}，使用本组数据库条目",
+        "type": "text",
+        "default": "配置组 {scope_id} 接入共享/曾托管服务器 {server_id}，使用本组数据库条目，不自动导入其他组成员",
+        "hint": "本模板变量：{scope_id} 配置组 ID；{server_id} 服务器配置 ID 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_bulk_add": {
+        "description": "日志与诊断 · 管理员批量导入；归属={owner}",
+        "type": "text",
+        "default": "管理员批量导入；归属={owner}",
+        "hint": "本模板变量：{owner} 条目所属用户 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "audit_restore": {
+        "description": "日志与诊断 · 从插件数据备份恢复；安全备份={backup}",
+        "type": "text",
+        "default": "从插件数据备份恢复；安全备份={backup}",
+        "hint": "本模板变量：{backup} 备份文件名称 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "sync_restart_reason": {
+        "description": "常用回复 · 重启中，完成后自动同步",
+        "type": "text",
+        "default": "重启中，完成后自动同步",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_bind_group": {
+        "description": "日志与诊断 · bind_group",
+        "type": "text",
+        "default": "bind_group",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_unbind_group": {
+        "description": "日志与诊断 · unbind_group",
+        "type": "text",
+        "default": "unbind_group",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_change_group": {
+        "description": "日志与诊断 · change_group",
+        "type": "text",
+        "default": "change_group",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_move_server": {
+        "description": "日志与诊断 · move_server",
+        "type": "text",
+        "default": "move_server",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_bulk_add": {
+        "description": "日志与诊断 · bulk_add",
+        "type": "text",
+        "default": "bulk_add",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_bulk_remove": {
+        "description": "日志与诊断 · bulk_remove",
+        "type": "text",
+        "default": "bulk_remove",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_bulk_transfer": {
+        "description": "日志与诊断 · bulk_transfer",
+        "type": "text",
+        "default": "bulk_transfer",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "action_restore": {
+        "description": "日志与诊断 · restore",
+        "type": "text",
+        "default": "restore",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_spark": {
+        "description": "TPS 摘要与标签 · spark",
+        "type": "text",
+        "default": "spark",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_paper": {
+        "description": "TPS 摘要与标签 · Paper/Spigot",
+        "type": "text",
+        "default": "Paper/Spigot",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_forge": {
+        "description": "TPS 摘要与标签 · Forge/NeoForge",
+        "type": "text",
+        "default": "Forge/NeoForge",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_format_tick": {
+        "description": "TPS 摘要与标签 · tick query",
+        "type": "text",
+        "default": "tick query",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_label_p95": {
+        "description": "TPS 摘要与标签 · P95",
+        "type": "text",
+        "default": "P95",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "source_rcon": {
+        "description": "状态与查询 · RCON",
+        "type": "text",
+        "default": "RCON",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "perf_percentile_entry": {
+        "description": "TPS 摘要与标签 · {percentile} {value} ms",
+        "type": "text",
+        "default": "{percentile} {value} ms",
+        "hint": "本模板变量：{percentile} 回复中标注的百分位名称；{value} 本次校验的值 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "alert_tps_current_detail": {
+        "description": "常用回复 · 本次返回的 TPS={perf_tps}",
+        "type": "text",
+        "default": "本次返回的 TPS={perf_tps}",
+        "hint": "本模板变量：{perf_tps} 性能/查询变量，详见 TPS 变量文档 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "help_full": {
+        "description": "常用回复 · Minecraft 管理菜单 {prefix} {add} <玩家名>：添加自己的白名单 {pr",
+        "type": "text",
+        "default": "Minecraft 管理菜单\n{prefix} {add} <玩家名>：添加自己的白名单\n{prefix} {list} [页码]：查看固定编号的白名单\n{prefix} {remove} <编号或玩家名>：移除自己的条目\n{prefix} {modify} <编号或玩家名> <新玩家名>：修改自己的条目\n{prefix} {players} [服务器]：查看在线玩家\n{prefix} {tps} [服务器]：查询 TPS\n{prefix} {status} [服务器]：查看状态\n{prefix} {servers}：查看本群服务器\n{prefix} {restart} <服务器或 all>：重启（管理员）\n{prefix} {logs} [页码]：操作日志（管理员）\n{prefix} {sync}：重试同步（管理员）\n{prefix} {import}：合并导入现有白名单（管理员）\n{prefix} {mine}：查看自己的条目\n{prefix} {diagnose} [服务器]：诊断（管理员）\n{prefix} {requests}：查看待审核申请\n{prefix} {approve} <申请编号>：通过申请（管理员）\n{prefix} {reject} <申请编号> [原因]：拒绝申请（管理员）\n{prefix} {cancel} <服务器>：取消倒计时（重启管理员）\n{prefix} {backup}：创建插件备份（全局管理员）",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{add} 对应子指令配置中的第一个别名；{list} 对应子指令配置中的第一个别名；{remove} 对应子指令配置中的第一个别名；{modify} 对应子指令配置中的第一个别名；{players} 对应子指令配置中的第一个别名；{tps} 对应子指令配置中的第一个别名；{status} 对应子指令配置中的第一个别名；{servers} 对应子指令配置中的第一个别名；{restart} 对应子指令配置中的第一个别名；{logs} 对应子指令配置中的第一个别名；{sync} 对应子指令配置中的第一个别名；{import} 对应子指令配置中的第一个别名；{mine} 对应子指令配置中的第一个别名；{diagnose} 对应子指令配置中的第一个别名；{requests} 对应子指令配置中的第一个别名；{approve} 对应子指令配置中的第一个别名；{reject} 对应子指令配置中的第一个别名；{cancel} 对应子指令配置中的第一个别名；{backup} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "choose_own_entry": {
+        "description": "常用回复 · 你有多条白名单，请指定要操作的编号： {entries} 移除：{prefix} {remove",
+        "type": "text",
+        "default": "你有多条白名单，请指定要操作的编号：\n{entries}\n移除：{prefix} {remove} <编号>\n修改：{prefix} {modify} <编号> <新玩家名>",
+        "hint": "本模板变量：{entries} 按行模板生成的明细；{prefix} 主指令，包含 /；{remove} 对应子指令配置中的第一个别名；{modify} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "own_entry_missing": {
+        "description": "常用回复 · 你还没有自己的白名单。可使用 {prefix} {add} <玩家名> 添加。",
+        "type": "text",
+        "default": "你还没有自己的白名单。可使用 {prefix} {add} <玩家名> 添加。",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{add} 当前上下文中的数据 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "choose_restart_server": {
+        "description": "常用回复 · 请选择服务器，或明确填写 all 操作本组全部服务器： {entries} {prefix} {",
+        "type": "text",
+        "default": "请选择服务器，或明确填写 all 操作本组全部服务器：\n{entries}\n{prefix} {restart} <服务器 ID 或 all>",
+        "hint": "本模板变量：{entries} 按行模板生成的明细；{prefix} 主指令，包含 /；{restart} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "usage_add": {
+        "description": "常用回复 · 用法：{prefix} {add} <玩家名> 例如：{prefix} {add} Steve",
+        "type": "text",
+        "default": "用法：{prefix} {add} <玩家名>\n例如：{prefix} {add} Steve",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{add} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "usage_modify": {
+        "description": "常用回复 · 用法：{prefix} {modify} [编号或原名] <新玩家名> 只有一条自己的白名单时可",
+        "type": "text",
+        "default": "用法：{prefix} {modify} [编号或原名] <新玩家名>\n只有一条自己的白名单时可省略编号。",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{modify} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "usage_help": {
+        "description": "常用回复 · 发送 {prefix} 查看常用菜单，或发送 {prefix} {help} all 查看全部指",
+        "type": "text",
+        "default": "发送 {prefix} 查看常用菜单，或发送 {prefix} {help} all 查看全部指令。",
+        "hint": "本模板变量：{prefix} 主指令，包含 /；{help} 对应子指令配置中的第一个别名 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_connection_request": {
+        "description": "权限与操作错误 · 请选择有效的服务器配置后再测试连接。",
+        "type": "text",
+        "default": "请选择有效的服务器配置后再测试连接。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_connection_reply": {
+        "description": "权限与操作错误 · RCON 已连接，但玩家查询无有效回复，请检查玩家查询命令。原始回复：{result}",
+        "type": "text",
+        "default": "RCON 已连接，但玩家查询无有效回复，请检查玩家查询命令。原始回复：{result}",
+        "hint": "本模板变量：{result} 本次完整结果或原始回复 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_connection_failed": {
+        "description": "权限与操作错误 · 连接失败：{error}。请检查 RCON 是否开启、地址端口及密码。",
+        "type": "text",
+        "default": "连接失败：{error}。请检查 RCON 是否开启、地址端口及密码。",
+        "hint": "本模板变量：{error} 失败原因，可由对应错误模板生成 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_root": {
+        "description": "权限与操作错误 · 请填写 AstrBot 可访问的服务端目录；可以填写共同父目录或单台服务端目录。",
+        "type": "text",
+        "default": "请填写 AstrBot 可访问的服务端目录；可以填写共同父目录或单台服务端目录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_path": {
+        "description": "权限与操作错误 · 扫描路径包含链接或超出所选目录，请检查目录。",
+        "type": "text",
+        "default": "扫描路径包含链接或超出所选目录，请检查目录。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_properties": {
+        "description": "权限与操作错误 · server.properties 无法读取、文件类型异常、过大或读取期间已改变。",
+        "type": "text",
+        "default": "server.properties 无法读取、文件类型异常、过大或读取期间已改变。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_limit": {
+        "description": "权限与操作错误 · 目录条目过多或服务端超过 64 个，请缩小扫描范围。",
+        "type": "text",
+        "default": "目录条目过多或服务端超过 64 个，请缩小扫描范围。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_expired": {
+        "description": "权限与操作错误 · 扫描结果已过期或配置已经变化，请重新扫描。",
+        "type": "text",
+        "default": "扫描结果已过期或配置已经变化，请重新扫描。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_selection": {
+        "description": "权限与操作错误 · 请选择有效且已配置 RCON 的服务器。",
+        "type": "text",
+        "default": "请选择有效且已配置 RCON 的服务器。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_existing": {
+        "description": "权限与操作错误 · 已有配置结构需要修复，请先使用手动配置处理。",
+        "type": "text",
+        "default": "已有配置结构需要修复，请先使用手动配置处理。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_different_root": {
+        "description": "权限与操作错误 · 已有服务器位于其他共同父目录，快速配置不会迁移现有路径；请使用原目录或手动配置。",
+        "type": "text",
+        "default": "已有服务器位于其他共同父目录，快速配置不会迁移现有路径；请使用原目录或手动配置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_platform": {
+        "description": "权限与操作错误 · 请选择消息机器人；没有可选项时填写群内 /sid 返回的 Bot ID。",
+        "type": "text",
+        "default": "请选择消息机器人；没有可选项时填写群内 /sid 返回的 Bot ID。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_group": {
+        "description": "权限与操作错误 · 请填写要绑定的群号。",
+        "type": "text",
+        "default": "请填写要绑定的群号。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_host": {
+        "description": "权限与操作错误 · 请填写有效的 RCON 地址。",
+        "type": "text",
+        "default": "请填写有效的 RCON 地址。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_changed": {
+        "description": "权限与操作错误 · 扫描后的 server.properties 已改变，请重新扫描后保存。",
+        "type": "text",
+        "default": "扫描后的 server.properties 已改变，请重新扫描后保存。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_group_overlap": {
+        "description": "权限与操作错误 · 这些群号属于不同配置组，不能自动合并，请分开配置。",
+        "type": "text",
+        "default": "这些群号属于不同配置组，不能自动合并，请分开配置。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_timeout": {
+        "description": "权限与操作错误 · 目录读取超时，请检查挂载或缩小扫描范围后重试。",
+        "type": "text",
+        "default": "目录读取超时，请检查挂载或缩小扫描范围后重试。",
+        "hint": "纯文本，无必需变量。 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
+      },
+      "error_setup_shared_group": {
+        "description": "权限与操作错误 · 群号已经属于共享配置（{groups}）。请填写该配置的完整群号列表，或使用手动配置调整，避免改",
+        "type": "text",
+        "default": "群号已经属于共享配置（{groups}）。请填写该配置的完整群号列表，或使用手动配置调整，避免改变其他群的服务器权限。",
+        "hint": "本模板变量：{groups} 现有共享配置中的完整群号列表 也支持主/子指令变量；花括号写为 {{ 或 }}。留空可隐藏此段；完整回复留空则不发送。"
       }
     }
   },
@@ -518,12 +2835,6 @@
     "type": "string",
     "default": "暂无数据",
     "hint": "1～32 字符单行文本。缺失指标不会被自动填成 0 或 20。"
-  },
-  "spark_file_max_age": {
-    "description": "本地 spark 采样最大有效秒数",
-    "type": "int",
-    "default": 10,
-    "hint": "过期数据会拒绝使用，默认 10 秒。Java agent 停止或服务器退出后不会继续返回旧数值。"
   },
   "notification_max_attempts": {
     "type": "int",
@@ -593,7 +2904,7 @@
   },
   "alert_tps_threshold": {
     "type": "int",
-    "description": "spark TPS 告警阈值",
+    "description": "TPS 告警阈值",
     "default": 15,
     "hint": "范围 1～20。"
   },
@@ -636,5 +2947,41 @@
     "type": "bool",
     "description": "全局强制白名单申请审核",
     "default": false
+  },
+  "bridge_enabled": {
+    "description": "消息互通总开关",
+    "type": "bool",
+    "default": false,
+    "hint": "默认关闭；还需在群绑定中开启本组消息互通。游戏事件读取本地日志，群消息通过 RCON tellraw 广播。"
+  },
+  "bridge_poll_seconds": {
+    "description": "游戏日志读取间隔（秒）",
+    "type": "int",
+    "default": 1,
+    "hint": "1～60 秒；只读取启用后新增的内容。"
+  },
+  "bridge_max_chars": {
+    "description": "互通消息最大字符数",
+    "type": "int",
+    "default": 500,
+    "hint": "32～2000 字符；超过限制截断，游戏消息也会限制在 RCON 包大小以内。"
+  },
+  "bridge_cooldown_seconds": {
+    "description": "群消息转发冷却（秒）",
+    "type": "int",
+    "default": 2,
+    "hint": "同一群内每位用户的冷却时间，0 关闭；队列最多 200 条，超过 30 秒的消息不再转发。"
+  },
+  "query_timeout_seconds": {
+    "description": "查询总超时（秒，0 自动）",
+    "type": "int",
+    "default": 0,
+    "hint": "包含排队、锁等待和查询。0 使用 max(5,2×RCON超时+2+本服spark日志等待)，可设1～300秒；手动设置优先。"
+  },
+  "tps_capability_cache_seconds": {
+    "description": "TPS 可用命令缓存（秒）",
+    "type": "int",
+    "default": 600,
+    "hint": "0 关闭；TPS 指令自动探测开启时生效。修改命令、重载配置或重启时重新探测。"
   }
 }

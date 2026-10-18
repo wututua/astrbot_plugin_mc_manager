@@ -5,9 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from logger_stub import logger_stub
+
 from mc_manager.config import Actor, MCError, Settings
 from mc_manager.service import Service
-from mc_manager.spark import METRIC_FIELDS, parse_spark_tps, variables_table
+from mc_manager.spark import METRIC_FIELDS, SPARK_TPS_EXAMPLE_TEMPLATE, parse_spark_tps, variables_table
 
 SAMPLE = """TPS from last 5s, 10s, 1m, 5m, 15m:
 13.24, 13.37, 15.95, 19.03, 19.67
@@ -149,7 +151,7 @@ class SparkParserTests(unittest.TestCase):
             settings = Settings(raw)
             self.assertEqual(settings.messages["tps"], Settings({}).messages["tps"])
             for name in EXPECTED:
-                self.assertIn("{" + name + "}", settings.messages["tps"])
+                self.assertIn("{" + name + "}", SPARK_TPS_EXAMPLE_TEMPLATE)
         stored = json.loads(Path("tps.variables.json").read_text(encoding="utf-8"))
         self.assertEqual(stored["variables"], table)
 
@@ -202,7 +204,7 @@ class SparkServiceTests(unittest.IsolatedAsyncioTestCase):
         async def send(*_):
             return True
 
-        self.service = Service(Settings(self.raw), self.root / "data", send, Client)
+        self.service = Service(Settings(self.raw), self.root / "data", send, Client, logger=logger_stub())
         self.actor = Actor("bot", "100", "user")
 
     async def asyncTearDown(self):
@@ -213,7 +215,7 @@ class SparkServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await self.service.execute(self.actor, "tps", ["s1"])
         self.assertEqual(self.commands, [("s1", "spark tps")])
         self.assertIn("13.24 / 13.37 / 15.95 / 19.03 / 19.67", result)
-        self.assertIn("MC进程：14 / 14 / 15", result)
+        self.assertIn("CPU（MC进程，10秒 / 1分钟 / 15分钟）：14 / 14 / 15 %", result)
         self.assertNotIn("部分 spark", result)
 
     async def test_custom_template_formats_independent_server_values(self):
@@ -231,6 +233,9 @@ class SparkServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "[s1] TPS：" + SAMPLE.strip())
 
     async def test_missing_metrics_show_placeholder_warning_and_original(self):
+        self.raw["servers"][0]["tps_output"] = "template"
+        self.raw["messages"] = {"tps": SPARK_TPS_EXAMPLE_TEMPLATE}
+        self.service.settings = Settings(self.raw)
         self.responses["s1"] = SAMPLE[: SAMPLE.index("CPU usage")]
         result = await self.service.execute(self.actor, "tps", ["s1"])
         self.assertIn("系统：暂无数据 / 暂无数据 / 暂无数据", result)

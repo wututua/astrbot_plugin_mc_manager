@@ -2,13 +2,14 @@
 
 import ast
 import copy
-import logging
 import os
 import tempfile
 import types
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from logger_stub import logger_stub
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE = Path(os.environ.get("MC_TEST_ASTRBOT_RELEASE", ROOT / ".research/release/astrbot"))
@@ -68,6 +69,18 @@ class AstrBotContractTests(unittest.IsolatedAsyncioTestCase):
             for node in tree.body:
                 if isinstance(node, ast.ImportFrom):
                     names.update(alias.asname or alias.name for alias in node.names)
+                    # Public message_components uses a star re-export in both
+                    # SDK versions. Verify the exported class in its official
+                    # source instead of rejecting a valid public API import.
+                    if any(alias.name == "*" for alias in node.names) and (node.module or "").startswith("astrbot."):
+                        exported = RELEASE / (node.module.removeprefix("astrbot.").replace(".", "/") + ".py")
+                        exported_tree = ast.parse(exported.read_text(encoding="utf-8"))
+                        names.update(
+                            item.name
+                            for item in exported_tree.body
+                            if isinstance(item, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                            and not item.name.startswith("_")
+                        )
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     names.add(node.name)
                 elif isinstance(node, ast.Assign):
@@ -79,11 +92,11 @@ class AstrBotContractTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(symbol.name in names or (module.parent / symbol.name / "__init__.py").is_file())
 
     def test_star_accepts_config_and_provides_dedicated_logger(self):
-        logger = logging.getLogger("astrbot.plugin.astrbot_plugin_mc_manager")
+        logger = logger_stub("astrbot.plugin.astrbot_plugin_mc_manager")
         namespace = {
             "star_map": {},
-            "logging": logging,
-            "logger": logging.getLogger("contracts"),
+            "logging": types.SimpleNamespace(getLogger=logger_stub, getLevelName=str),
+            "logger": logger_stub("contracts"),
             "LogManager": types.SimpleNamespace(get_plugin_logger=lambda name: logger),
         }
         star = compile_class("core/star/base.py", "Star", {"__init__"}, namespace)
@@ -154,7 +167,7 @@ class AstrBotContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_context_sends_group_broadcast_to_matching_platform_instance(self):
         namespace = session_namespace()
-        namespace["logger"] = logging.getLogger("contracts")
+        namespace["logger"] = logger_stub("contracts")
         context_type = compile_class("core/star/context.py", "Context", {"send_message"}, namespace)
         received = []
 

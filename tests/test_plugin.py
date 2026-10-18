@@ -5,8 +5,8 @@ Skipped when neither AstrBot nor the researched release API is available.
 
 import asyncio
 import importlib.util
+import inspect
 import json
-import logging
 import os
 import sys
 import tempfile
@@ -14,6 +14,8 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+
+from logger_stub import logger_stub
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_ROOT = Path(os.environ.get("MC_TEST_ASTRBOT_RELEASE", ROOT / ".research/release/astrbot"))
@@ -73,12 +75,12 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         self.Config = Config
         self.modules["astrbot.api"].AstrBotConfig = Config
-        self.modules["astrbot.api"].logger = logging.getLogger("adapter-tests")
+        self.modules["astrbot.api"].logger = logger_stub("adapter-tests")
 
         class Star:
             def __init__(inner, context, config=None):
                 inner.context = context
-                inner.logger = logging.getLogger("adapter-tests")
+                inner.logger = logger_stub("adapter-tests")
 
         class StarTools:
             @classmethod
@@ -191,6 +193,102 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.wait_for(wait(), 2)
 
+    async def test_web_overwrite_switch_repairs_pending_file_without_reassigning_owner(self):
+        actor = self.main.Actor("bot", "100", "member", origin="bot:GroupMessage:100")
+        await self.plugin.service.execute(actor, "add", ["qicaiyu"])
+        before = dict(self.plugin.service.store.entries("g1")[0])
+        path = self.root / "server1" / "whitelist.json"
+        path.write_bytes(b"")
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0]["whitelist_overwrite"] = True
+        with (
+            self.bound_request({"config": raw}),
+            patch.object(
+                self.main,
+                "Service",
+                lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+            ),
+        ):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        await self.plugin.service.pause()
+        self.assertTrue(self.plugin.service.settings.servers["server1"].whitelist_overwrite)
+        await self.plugin.service.execute(self.main.Actor("bot", "100", "admin", admin=True), "sync", [])
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))[0]["name"], "qicaiyu")
+        self.assertEqual(dict(self.plugin.service.store.entries("g1")[0]), before)
+        backups = list((self.root / "server1" / ".mcwl-backups").glob("*.json"))
+        self.assertTrue(any(backup.read_bytes() == b"" for backup in backups))
+        self.assertIs(self.plugin.service.logger, self.plugin.logger)
+
+    async def test_web_spark_log_options_save_and_action_returns_async_report(self):
+        import test_spark_log as log_fixture
+
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0].update(
+            spark_log_fallback=True,
+            spark_log_path="logs/latest.log",
+            spark_log_encoding="utf-8",
+            spark_log_wait_seconds=2,
+        )
+        raw["messages"] = {"tps": "{server_id}|{query_source}|{tps_source}|{tps_5s}|{mspt_1m_p95}"}
+        self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
+        await self.plugin.service.pause()
+        path = self.root / "server1/logs/latest.log"
+        path.parent.mkdir()
+        path.write_bytes(log_fixture.forge_report(log_fixture.SCREENSHOT))
+        original = self.FakeRcon.command
+
+        async def command(client, text):
+            if text == "spark tps":
+                self.FakeRcon.commands.append((client.server.id, text))
+                with path.open("ab") as stream:
+                    stream.write(log_fixture.forge_report())
+                return ""
+            return await original(client, text)
+
+        with (
+            patch.object(self.FakeRcon, "command", command),
+            self.bound_request({"group": "g1", "action": "tps", "args": ["server1"]}),
+        ):
+            response = await self.plugin.page_action()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(json.loads(response.body)["message"], "server1|服务端新增日志|log|13.24|77.0")
+        self.assertEqual(self.plugin.config["servers"][0]["spark_log_wait_seconds"], 2)
+
+    async def test_old_collector_config_is_hidden_and_cleaned_on_save(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["spark_file_max_age"] = "retired"
+        raw["servers"][0].update(tps_source="file", spark_file="../outside.txt")
+        raw["messages"] = {"tps": "{tps_1m} {tps_file_age_seconds}"}
+        self.plugin.config.update(raw)
+        with self.bound_request():
+            visible = json.loads((await self.plugin.page_config()).body)["config"]
+        self.assertNotIn("spark_file_max_age", visible)
+        self.assertNotIn("spark_file", visible["servers"][0])
+        with (
+            self.bound_request({"config": raw}),
+            patch.object(
+                self.main,
+                "Service",
+                lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+            ),
+        ):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertFalse(self.plugin.config_error)
+        self.assertNotIn("spark_file_max_age", self.plugin.config)
+        self.assertNotIn("tps_source", self.plugin.config["servers"][0])
+        self.assertEqual(self.plugin.config["messages"]["tps"], raw["messages"]["tps"])
+        self.assertEqual(self.plugin.config["servers"][0]["rcon_password"], "private-secret")
+
+    async def test_service_and_replacement_factory_share_star_logger(self):
+        self.assertIs(self.plugin.service.logger, self.plugin.logger)
+        candidate = self.plugin._new_service(self.plugin.settings)
+        try:
+            self.assertIs(candidate.logger, self.plugin.logger)
+        finally:
+            await candidate.close()
+
     async def test_initialize_probes_without_dashboard_refresh_or_chat_command(self):
         await self.plugin.terminate()
         self.FakeRcon.commands.clear()
@@ -257,15 +355,46 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("重复绑定", response.body.decode())
         self.assertIs(self.plugin.service, original)
 
+    async def test_native_core_variables_roundtrip_with_examples_in_official_web_api(self):
+        import test_performance as performance_fixture
+
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["servers"][0].update(tps_mode="native", tps_command="forge tps", tps_output="template")
+        raw["messages"] = {"tps": "{tps_overall}|{mspt_overall}|{forge_dimension_count}|{forge_nether_tps}"}
+        response = await self.save_with_fake_rcon(raw)
+        self.assertEqual(response.status_code, 200, response.body)
+        await self.plugin.service.pause()
+        original = self.FakeRcon.command
+
+        async def command(client, text):
+            return performance_fixture.FORGE if text == "forge tps" else await original(client, text)
+
+        with (
+            patch.object(self.FakeRcon, "command", command),
+            self.bound_request({"group": "g1", "action": "tps", "args": ["server1"]}),
+        ):
+            response = await self.plugin.page_action()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertEqual(json.loads(response.body)["message"], "19.980|13.500|2|20.000")
+        with self.bound_request():
+            config = json.loads((await self.plugin.page_config()).body)
+        self.assertEqual(len(config["tps_examples"]), 6)
+        self.assertEqual(config["config"]["servers"][0]["tps_output"], "template")
+        tick = next(example for example in config["tps_examples"] if example["id"] == "tick")
+        self.assertEqual(tick["preview"]["tps_overall"], "暂无数据")
+        self.assertEqual(tick["preview"]["mspt_p95"], "22.4")
+        self.assertEqual(self.plugin.config["servers"][0]["rcon_password"], "private-secret")
+
     async def test_native_tps_mode_roundtrips_and_chat_returns_raw_command_reply(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))
-        raw["servers"][0].update(tps_mode="native", tps_command="native:query", tps_source="file")
+        raw["servers"][0].update(tps_mode="native", tps_command="native:query", tps_output="raw", tps_source="file")
         raw["messages"] = {"tps": "DO_NOT_FORMAT {tps_5s}"}
         self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
         await self.plugin.service.pause()
         with self.bound_request():
             config = json.loads((await self.plugin.page_config()).body)
-        self.assertEqual(config["config"]["servers"][0]["tps_mode"], "native")
+        self.assertNotIn("tps_mode", config["config"]["servers"][0])
+        self.assertEqual(config["config"]["servers"][0]["tps_command"], "native:query")
         payload = "Core TPS: 19.97\nTick time: 12.4 ms\nCPU: 35%\n"
         original = self.FakeRcon.command
 
@@ -278,7 +407,7 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_tps_chat_sends_every_chunk_and_web_returns_full_text(self):
         raw = json.loads(json.dumps(dict(self.plugin.config)))
-        raw["servers"][0].update(tps_mode="native", tps_command="native:query")
+        raw["servers"][0].update(tps_mode="native", tps_command="native:query", tps_output="raw")
         self.assertEqual((await self.save_with_fake_rcon(raw)).status_code, 200)
         await self.plugin.service.pause()
         payload = "Core metrics line: 19.99 TPS 40 ms\n" * 1200 + "END"
@@ -394,8 +523,8 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         with self.bound_request():
             response = await self.plugin.page_config()
         data = json.loads(response.body)
-        self.assertIn("{tps_5s}", data["tps_default_template"])
-        self.assertIn("{cpu_process_15m}", data["tps_default_template"])
+        self.assertIn("{perf_tps_line}", data["tps_default_template"])
+        self.assertIn("{perf_cpu_lines}", data["tps_default_template"])
         metrics = [row for row in data["tps_variables"] if row["category"] == "指标"]
         self.assertEqual(len(metrics), 19)
         by_name = {row["name"]: row for row in metrics}
@@ -797,14 +926,85 @@ class PluginAdapterTests(unittest.IsolatedAsyncioTestCase):
         results = []
         for handler in handlers:
             kwargs = event.get_extra("handlers_parsed_params", {}).get(handler.handler_full_name, {})
-            async for result in handler.handler(self.plugin, event, **kwargs):
-                results.append(result)
+            response = handler.handler(self.plugin, event, **kwargs)
+            if inspect.isawaitable(response):
+                await response
+            else:
+                async for result in response:
+                    results.append(result)
         return event, handlers, results
+
+    async def enable_bridge(self):
+        self.plugin.config["bridge_enabled"] = True
+        self.plugin.config["groups"][0]["bridge_enabled"] = True
+        self.plugin.config["bridge_cooldown_seconds"] = 0
+        settings = self.main.Settings(dict(self.plugin.config))
+        self.plugin.settings = self.plugin.service.settings = settings
+        self.main.MCCommandFilter.settings = settings
+
+    async def dispatch_bridge(self, text, *, user="member", group="100", platform="bot"):
+        from command_runtime import CommandEvent, wake_event
+
+        event = CommandEvent(text, self.command_runtime.namespace["MessageType"].GROUP_MESSAGE, group, platform, user)
+        plain = self.modules["astrbot.api.message_components"].Plain(text)
+        event.get_messages = lambda: [plain]
+        handlers = await wake_event(self.command_runtime, event)
+        for handler in handlers:
+            if handler.handler_name == "relay_group_message":
+                await handler.handler(self.plugin, event)
+        return event, handlers
+
+    async def test_bridge_receives_ordinary_group_message_without_waking_llm_or_stopping_event(self):
+        await self.enable_bridge()
+        event, handlers = await self.dispatch_bridge("hello 世界")
+        self.assertEqual([item.handler_name for item in handlers], ["relay_group_message"])
+        self.assertFalse(event.is_at_or_wake_command)
+        self.assertFalse(event.stopped)
+        self.assertEqual(self.plugin.service.bridge_queue.qsize(), 1)
+        await self.plugin.service.bridge_flush()
+        self.assertTrue(any(command.startswith("tellraw @a ") for _, command in self.FakeRcon.commands))
+
+    async def test_bridge_does_not_relay_mc_commands_or_bot_self_or_other_group(self):
+        await self.enable_bridge()
+        for text, kwargs in (
+            ("/mc help", {}),
+            ("mc 添加 Steve", {}),
+            ("hello", {"user": "bot-self"}),
+            ("hello", {"group": "999"}),
+            ("hello", {"platform": "wrong"}),
+            ("hello", {"group": ""}),
+        ):
+            with self.subTest(text=text, kwargs=kwargs):
+                _, handlers = await self.dispatch_bridge(text, **kwargs)
+                self.assertFalse(any(item.handler_name == "relay_group_message" for item in handlers))
+        self.assertEqual(self.plugin.service.bridge_queue.qsize(), 0)
+
+    async def test_bridge_switches_can_be_saved_and_applied_through_authenticated_web_api(self):
+        raw = json.loads(json.dumps(dict(self.plugin.config)))
+        raw["bridge_enabled"] = True
+        raw["groups"][0].update(bridge_enabled=True, bridge_prefix="#mc", bridge_death=False)
+        with (
+            self.bound_request({"config": raw}),
+            patch.object(
+                self.main,
+                "Service",
+                lambda settings, path, send, **kwargs: self.real_service(settings, path, send, **kwargs),
+            ),
+        ):
+            response = await self.plugin.page_save_config()
+        self.assertEqual(response.status_code, 200, response.body)
+        self.assertTrue(self.plugin.service.settings.bridge_enabled)
+        self.assertIs(self.plugin.service.logger, self.plugin.logger)
+        self.assertEqual(self.plugin.service.settings.groups["g1"].bridge_prefix, "#mc")
+        self.assertFalse(self.plugin.service.settings.groups["g1"].bridge_death)
+        self.assertIsNotNone(self.plugin.service.bridge_poll_task)
 
     async def test_mc_is_present_in_real_command_registry_with_native_filter(self):
         handlers = self.command_runtime.registry.get_handlers_by_event_type(
             self.command_runtime.namespace["EventType"].AdapterMessageEvent
         )
+        self.assertEqual(len(handlers), 2)
+        handlers = [item for item in handlers if item.handler_name == "mc"]
         self.assertEqual(len(handlers), 1)
         native = [item for item in handlers[0].event_filters if isinstance(item, self.command_runtime.command_filter)]
         self.assertEqual(len(native), 1)
