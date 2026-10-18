@@ -37,7 +37,7 @@ class PropertiesTests(unittest.TestCase):
 class DiscoveryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.base = {"servers": [], "groups": [], "messages": {"tps": "CUSTOM {perf_tps}"}}
         self.plans = SetupPlans()
 

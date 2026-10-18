@@ -52,7 +52,7 @@ class FakeRcon:
 class CoreTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         for name in ["s1", "s2", "s3"]:
             (self.root / name).mkdir()
             (self.root / name / "whitelist.json").write_text("[]", encoding="utf-8")

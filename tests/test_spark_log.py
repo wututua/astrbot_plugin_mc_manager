@@ -40,7 +40,7 @@ def forge_report(report=SAMPLE, thread="spark-worker-pool-1-thread-2", encoding=
 class SparkLogParserTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         (self.root / "s1/logs").mkdir(parents=True)
         self.server = Settings({"server_root": str(self.root), "servers": [{"id": "s1"}]}).servers["s1"]
         self.path = self.root / "s1/logs/latest.log"
